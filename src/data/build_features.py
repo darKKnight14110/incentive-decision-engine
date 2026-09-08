@@ -10,6 +10,7 @@ import duckdb
 import pandas as pd
 
 from src.data.generate_marketplace import TABLE_NAMES, write_marketplace_data
+from src.data.validate_data import validate_feature_table
 
 SQL_ASSETS = (
     "product_metrics.sql",
@@ -81,9 +82,11 @@ def build_feature_frame(
     try:
         register_marketplace_tables(connection, tables)
         execute_sql_assets(connection, sql_dir)
-        return connection.sql(
+        features = connection.sql(
             "SELECT * FROM eligible_users ORDER BY user_id, decision_ts"
         ).df()
+        validate_feature_table(features).raise_if_invalid()
+        return features
     finally:
         connection.close()
 
@@ -98,6 +101,10 @@ def build_features(
     try:
         load_marketplace_tables(connection, raw_dir)
         execute_sql_assets(connection, sql_dir)
+        features = connection.sql(
+            "SELECT * FROM eligible_users ORDER BY user_id, decision_ts"
+        ).df()
+        validate_feature_table(features).raise_if_invalid()
         target = Path(output_path)
         target.parent.mkdir(parents=True, exist_ok=True)
         connection.execute(
@@ -105,9 +112,7 @@ def build_features(
             "TO ? (FORMAT PARQUET)",
             [str(target)],
         )
-        return connection.sql(
-            "SELECT * FROM eligible_users ORDER BY user_id, decision_ts"
-        ).df()
+        return features
     finally:
         connection.close()
 
