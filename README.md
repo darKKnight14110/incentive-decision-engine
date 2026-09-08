@@ -1,4 +1,4 @@
-# Increment Decision Engine
+# Incentive Decision Engine
 
 An end-to-end foundation for deciding which customers should receive a
 promotion when the business has a fixed budget and real operational
@@ -30,8 +30,9 @@ needs more than a classifier:
    projections.
 
 The current repository implements the product framing, unit-economics contract,
-synthetic marketplace data model, and SQL analytics foundation required before
-causal modeling and policy optimization can be trusted.
+synthetic marketplace data model, SQL analytics foundation, and build-time data
+contracts required before causal modeling and policy optimization can be
+trusted.
 
 ## Resume significance
 
@@ -141,6 +142,23 @@ The feature build is implemented in
 It loads generated CSVs into DuckDB, executes the SQL assets in dependency
 order, and writes one row per eligible user to Parquet.
 
+### M4: data contracts and testing
+
+[`src/data/validate_data.py`](<C:/Users/Varad S Pendse/Desktop/churnproject/src/data/validate_data.py>)
+defines executable contracts for every raw marketplace table and for the
+persisted `eligible_users` modeling table. The validator checks types,
+nullability, ranges, uniqueness, referential integrity, timestamp ordering,
+monetary reconciliation, treatment enums, and refund amounts that exceed the
+linked order value. The feature contract also rejects unexpected or
+post-treatment columns and enforces the strict point-in-time boundary.
+
+The feature build fails before writing Parquet when its output contract is
+invalid. The raw validator writes a named report to
+`data/processed/data_contract_report.csv`; the non-destructive SQL quality view
+continues to report intentional source defects separately. See
+[`docs/learning_m4.md`](<C:/Users/Varad S Pendse/Desktop/churnproject/docs/learning_m4.md>)
+for the contract design, severity rules, and test evidence.
+
 ## Point-in-time correctness
 
 Every feature used for a decision at `decision_ts` is computed from events with
@@ -184,6 +202,9 @@ python -m src.data.build_features \
   --raw-dir data/raw \
   --output-path data/processed/eligible_users.parquet \
   --quality-report data/processed/data_quality_issues.csv
+python -m src.data.validate_data \
+  --raw-dir data/raw \
+  --report-path data/processed/data_contract_report.csv
 ```
 
 The equivalent project gates are:
@@ -204,8 +225,9 @@ With the default seed and 1,000 generated users, the current rebuild produces:
 - 312 distinct users in the modeling table;
 - a quality report containing the intentionally injected duplicate-assignment,
   pre-signup-order, and negative-margin defects;
-- 28 passing tests covering generation, economics, SQL grain, point-in-time
-  exclusion, schema execution, and build outputs.
+- a contract report with named structural errors and operational warnings;
+- 37 passing tests covering generation, economics, SQL grain, point-in-time
+  exclusion, schema contracts, fixture outputs, and build artifacts.
 
 These numbers describe a local seeded simulation. They are not measured
 business results.
@@ -279,7 +301,7 @@ tests/         Contract, generator, economics, SQL, and PIT tests
 | M1 unit economics | Complete |
 | M2 marketplace data model | Complete |
 | M3 SQL analytics and PIT features | Complete |
-| M4 full data-contract suite | Foundation in place; expansion next |
+| M4 full data-contract suite | Complete |
 | Experiment analysis, uplift modeling, optimization, and rollout | Planned |
 
 The next credible milestone is randomized experiment analysis, followed by

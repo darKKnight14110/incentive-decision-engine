@@ -178,7 +178,11 @@ They are never joined. The Criteo data carries the causal claim; the synthetic d
 | `city_hour_capacity` | one row per (city, hour) | `city_id, hour_ts` | context |
 | `eligible_users` | **one row per (user, decision_ts)** | `user_id, decision_ts` | modeling table |
 
-The bolded post-treatment tables are the feature blocklist. `src/data/build_features.py` should import an explicit `POST_TREATMENT_SOURCES` constant and the leakage test should assert no published feature derives from them.
+The bolded post-treatment tables are the feature blocklist. The executable
+`POST_TREATMENT_SOURCES` constant in `src/data/validate_data.py` is enforced at
+the feature-table boundary, and the leakage tests assert that no published
+feature contains a post-treatment source column or event at/after the
+decision timestamp.
 
 ### 4.2 Point-in-time correctness
 
@@ -345,7 +349,7 @@ Fill in `Consequences` with what actually happened as you build. A decision log 
 - **Soundbite.** "If it's in a notebook, it isn't tested, so nothing that produces a number I'd quote lives in a notebook."
 
 **ADR-012 · Data contracts as a build gate**
-- **Decision.** Pandera schemas plus set-based SQL assertions run in CI. Failures block the build.
+- **Decision.** Executable typed dataframe contracts plus set-based SQL assertions run in CI. Failures block the build.
 - **Why.** The single highest-consequence class of error in this project is silent: a join that fans out, a duplicate assignment, a post-treatment feature. None of these produce an exception; they produce a plausible wrong number. Contracts turn silent errors into loud ones.
 - **Consequences.** ~4 hours of setup. Catches the fan-out bug that everyone gets at least once.
 - **Soundbite.** "I injected 0.3% duplicate assignments into my own generator so the tests would have something to catch, and then I checked they caught it."

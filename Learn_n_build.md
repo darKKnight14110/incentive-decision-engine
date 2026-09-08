@@ -162,7 +162,7 @@ Read these once. They are the difference between a portfolio project and a pile 
 
 **What you actually need**
 - Schema contracts: dtype, nullability, range, uniqueness, referential integrity.
-- Business-rule contracts: `refund_amount <= order_amount`, `margin_rate BETWEEN 0 AND 1`, `treatment IN (0,1)`.
+- Business-rule contracts: `refund_amount <= order_amount`, bounded economic rates, and the synthetic decision-arm enum (`no_offer`, `small_offer`, `large_offer`). The Criteo source remains binary and is validated separately when M5 begins.
 - Fixture-based unit tests for transformation logic: build a 12-row hand-written input where you know the right answer, and assert the exact output.
 - Fail loud, fail at build time, not in the notebook three weeks later.
 
@@ -173,8 +173,8 @@ Read these once. They are the difference between a portfolio project and a pile 
 **Checkpoint** — `pytest` runs green, and if you deliberately corrupt one row in the generator, exactly one named test fails with a readable message.
 
 **Build**
-- `src/data/validate_data.py` — schemas for each processed table.
-- `tests/test_features.py` — at least one fixture test for the funnel, one for the retention cohort, one for the PIT join.
+- `src/data/validate_data.py` — executable contracts for each raw table and the processed modeling table.
+- `tests/test_features.py` plus the hand-built fixture module — exact fixture tests for the funnel, retention cohort, and PIT join.
 - A `make build` / `make test` (or `invoke` / shell script) so the Phase 2 gate — "rebuild from raw with one command" — is literally true.
 
 ---
