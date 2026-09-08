@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.coverage
+.pytest_cache/
+.pytest_tmp/
+.mypy_cache/
+.venv/
+data/raw/*
+data/interim/*
+data/processed/*
+reports/*
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+!reports/figures/
+!reports/figures/metric_tree.png

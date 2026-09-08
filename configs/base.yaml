@@ -1,0 +1,23 @@
+project:
+  currency: INR
+  cadence_days: 7
+  outcome_window_days: 14
+  attribution_window_days: 14
+economics:
+  contribution_margin_rate:
+    value: 0.22
+    sensitivity: [0.15, 0.30]
+    status: simulated_placeholder
+  average_order_value_inr:
+    value: 800
+    sensitivity: [600, 1000]
+    status: simulated_placeholder
+  offer_redemption_rate:
+    small: {value: 0.35, sensitivity: [0.20, 0.50]}
+    large: {value: 0.55, sensitivity: [0.35, 0.70]}
+    status: simulated_placeholder
+  offer_cost_accounting_mode: redemption
+actions:
+  no_offer: {face_value_inr: 0}
+  small_offer: {face_value_inr: 50}
+  large_offer: {face_value_inr: 100}

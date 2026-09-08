@@ -1,0 +1,12 @@
+eligibility:
+  requires_prior_completed_order: true
+  minimum_account_age_days: 7
+  contact_cooldown_days: 14
+  requires_active_city: true
+  requires_contact_consent: true
+constraints:
+  one_action_per_customer: true
+  contact_frequency_is_hard_constraint: true
+  budget_inr: null
+  maximum_contact_volume: null
+  city_hour_capacity: null
