@@ -175,7 +175,7 @@ uses Criteo for measured advertising incrementality; the checked-in smoke run
 is simulated Criteo-shaped evidence. Synthetic marketplace data supplies
 multi-action economics, capacity, interference, and rollout demonstrations.
 
-## Interview-defendable targeting architecture
+## Architecture
 
 The decision engine follows a modular, public-architecture pattern: an
 orchestrator coordinates a leakage-safe segmentor, a budget pacer, a pluggable
