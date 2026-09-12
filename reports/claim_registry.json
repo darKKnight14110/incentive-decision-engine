@@ -1,18 +1,21 @@
 {
   "schema_version": "claims-v1",
-  "run_mode": "smoke",
-  "run_manifest_revision": "2cee6ed9bd30be9c979d0b7d16d20d149e472ff9",
+  "run_mode": "full",
+  "run_manifest_revision": "cc08f72972290aabf698d764b6e21d669b69ddd4",
   "claims": [
     {
       "id": "criteo_conversion_itt",
-      "label": "simulated",
+      "label": "measured",
       "source": "Criteo randomized advertising assignment",
       "outcome": "conversion",
-      "point": 0.002906982387487359,
-      "ci_low": -0.003313348731680343,
-      "ci_high": 0.00912731350665506,
-      "rows": 12000,
-      "caveat": "Smoke is a simulated Criteo-shaped fixture; full mode streams the validated archive."
+      "point": 0.0011518730521316279,
+      "ci_low": 0.001084505777075477,
+      "ci_high": 0.0012192403271877787,
+      "rows": 13979592,
+      "policy_value_point": 0.0011836911021003748,
+      "policy_value_ci_low": 0.0010317999086856592,
+      "policy_value_ci_high": 0.0013355822955150904,
+      "caveat": "Locked model and threshold evaluated once on the held-out Criteo test partition."
     },
     {
       "id": "synthetic_marketplace_policy",
