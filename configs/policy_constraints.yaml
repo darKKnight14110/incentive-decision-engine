@@ -10,3 +10,7 @@ constraints:
   budget_inr: null
   maximum_contact_volume: null
   city_hour_capacity: null
+  minimum_expected_roi: null
+budget_grid:
+  fractions_of_treat_all_small: [0.10, 0.25, 0.50, 0.75, 1.00]
+canonical_budget_fraction: 0.50

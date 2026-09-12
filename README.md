@@ -29,10 +29,11 @@ needs more than a classifier:
 6. Evaluation that separates measured outcomes, model estimates, and simulated
    projections.
 
-The current repository implements the product framing, unit-economics contract,
-synthetic marketplace data model, SQL analytics foundation, and build-time data
-contracts required before causal modeling and policy optimization can be
-trusted.
+The repository now includes the complete offline flagship pipeline: randomized
+experiment diagnostics, uplift learners, matched-budget policy evaluation,
+capacity-aware synthetic allocation, rollout monitoring, and portfolio
+artifacts. Full Criteo reproduction is opt-in because the raw public dataset is
+large and is not redistributed here.
 
 ## Resume significance
 
@@ -159,6 +160,23 @@ continues to report intentional source defects separately. See
 [`docs/learning_m4.md`](<C:/Users/Varad S Pendse/Desktop/churnproject/docs/learning_m4.md>)
 for the contract design, severity rules, and test evidence.
 
+### M5-M10: causal decision engine
+
+`src/experimentation/` validates and partitions Criteo, checks SRM and balance,
+estimates ITT effects, and calculates power/MDE. `src/causal/` provides
+known-ground-truth estimator simulations, constant/T/X/DR learners, uplift
+deciles, Qini, AUUC-style curves, and randomized policy value. `src/policy/`
+converts effects into redemption-adjusted INR value and solves a multiple-choice
+knapsack with budget, contact, ROI, and capacity constraints.
+
+### M11-M14: marketplace, rollout, and packaging
+
+`src/marketplace/` demonstrates city-hour capacity and a cluster-randomized
+validation design. `src/monitoring/` provides drift and ramp/rollback gates.
+`src/pipeline.py` generates deterministic smoke reports, figures, an experiment
+PDF, and an interview deck. Run `streamlit run app/dashboard.py` to inspect the
+budget trade-off interactively.
+
 ## Point-in-time correctness
 
 Every feature used for a decision at `decision_ts` is computed from events with
@@ -212,9 +230,20 @@ The equivalent project gates are:
 ```bash
 make build
 make test
+make download-criteo
+make reproduce-full
 ```
 
 On Windows, run the Python commands directly if `make` is unavailable.
+
+For the flagship smoke run, use:
+
+```powershell
+python -m src.pipeline --mode smoke --output-dir reports
+```
+
+For the full public experiment, download the ignored raw file first and then
+run `python -m src.pipeline --mode full --output-dir reports`.
 
 ## Verified example output
 
@@ -226,8 +255,9 @@ With the default seed and 1,000 generated users, the current rebuild produces:
 - a quality report containing the intentionally injected duplicate-assignment,
   pre-signup-order, and negative-margin defects;
 - a contract report with named structural errors and operational warnings;
-- 37 passing tests covering generation, economics, SQL grain, point-in-time
-  exclusion, schema contracts, fixture outputs, and build artifacts.
+- 44 passing tests covering generation, economics, SQL grain, point-in-time
+  exclusion, schema contracts, causal contracts, optimizer constraints, and
+  artifact smoke checks.
 
 These numbers describe a local seeded simulation. They are not measured
 business results.
@@ -302,8 +332,13 @@ tests/         Contract, generator, economics, SQL, and PIT tests
 | M2 marketplace data model | Complete |
 | M3 SQL analytics and PIT features | Complete |
 | M4 full data-contract suite | Complete |
-| Experiment analysis, uplift modeling, optimization, and rollout | Planned |
+| Experiment analysis and causal validation | Implemented |
+| Uplift modeling and matched-budget policies | Implemented |
+| Capacity-aware marketplace extension | Implemented (simulated) |
+| Rollout monitoring and portfolio artifacts | Implemented |
+| Full Criteo reproduction | Opt-in via `make download-criteo` |
 
-The next credible milestone is randomized experiment analysis, followed by
-known-ground-truth estimator validation. The project should only claim an
-incremental-margin improvement after a held-out policy evaluation supports it.
+The smoke pipeline is reproducible without network access. Full Criteo results
+remain measured/estimated advertising incrementality, while marketplace
+economics and capacity results remain simulated. No realized business-impact
+percentage is claimed by this repository.

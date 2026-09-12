@@ -1,0 +1,18 @@
+{
+  "mode": "smoke",
+  "seed": 2025,
+  "rows": 12000,
+  "estimate": {
+    "point": 0.002906982387487359,
+    "standard_error": 0.0031736966435265547,
+    "ci_low": -0.003313348731680343,
+    "ci_high": 0.00912731350665506,
+    "treated_n": 10178,
+    "control_n": 1822,
+    "srm_p": 1.0,
+    "outcome": "conversion"
+  },
+  "policy_value_estimate": -0.003032195956971396,
+  "platform": "3.12.6",
+  "inputs": {}
+}

@@ -8,6 +8,12 @@ dependencies = [
     "pandas>=2.1,<3",
     "PyYAML>=6,<7",
     "duckdb",
+    "scikit-learn>=1.4,<2",
+    "scipy>=1.11,<2",
+    "statsmodels>=0.14,<1",
+    "streamlit>=1.35,<2",
+    "plotly>=5.20,<7",
+    "python-pptx>=0.6.23,<2",
 ]
 
 [project.optional-dependencies]
@@ -16,6 +22,10 @@ dev = ["pytest>=8,<9"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --basetemp=.pytest_tmp"
+markers = [
+    "slow: full-data or repeated-simulation checks",
+    "full: requires the downloaded Criteo dataset",
+]
 
 [tool.setuptools.packages.find]
 include = ["src*"]

@@ -1,0 +1,9 @@
+random_seed: 2025
+cross_fitting_folds: 5
+stability_seeds: [11, 22, 33, 44, 55]
+bootstrap_replicates: 500
+base_estimator:
+  max_iter: 200
+  learning_rate: 0.05
+  max_leaf_nodes: 31
+  min_samples_leaf: 50

@@ -14,3 +14,11 @@ reports/*
 !data/processed/.gitkeep
 !reports/figures/
 !reports/figures/metric_tree.png
+!reports/figures/*.png
+!reports/figures/*.csv
+!reports/policy_comparison.csv
+!reports/policy_results.csv
+!reports/run_manifest.json
+!reports/experiment_readout.pdf
+!reports/executive_case_study.pdf
+!reports/interview_deck.pptx

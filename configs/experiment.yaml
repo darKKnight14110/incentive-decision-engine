@@ -1,0 +1,18 @@
+dataset:
+  url: "http://go.criteo.net/criteo-research-uplift-v2.1.csv.gz"
+  filename: "criteo-research-uplift-v2.1.csv.gz"
+  expected_features: [f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11]
+  primary_outcome: conversion
+  secondary_outcome: visit
+  treatment_column: treatment
+  exposure_column: exposure
+  smoke_rows: 12000
+split:
+  train_fraction: 0.60
+  validation_fraction: 0.20
+  test_fraction: 0.20
+  seed: 2025
+inference:
+  confidence_level: 0.95
+  srm_alpha: 0.001
+  bootstrap_replicates: 500

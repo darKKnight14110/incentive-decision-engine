@@ -1,0 +1,17 @@
+holdout_fraction: 0.02
+validation_fraction: 0.05
+ramp_gates:
+  validation: 0.05
+  partial: 0.20
+  half: 0.50
+  full: 1.00
+thresholds:
+  primary_lower_bound: 0.0
+  cancellation_rate_max: 0.12
+  refund_rate_max: 0.10
+  p95_delivery_minutes_max: 65
+  contacts_per_user_14d_max: 1.0
+retraining:
+  psi_threshold: 0.20
+  calibration_brier_relative_change: 0.20
+  policy_mix_relative_change: 0.25
