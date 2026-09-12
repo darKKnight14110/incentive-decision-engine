@@ -13,15 +13,15 @@ capacity-aware optimizer selects one action per customer and respects both a
 
 | Policy | Expected net contribution | Spend | Treatment rate |
 | --- | ---: | ---: | ---: |
-| Random | ₹1,232 | ₹1,571 | 24.8% |
-| Propensity | ₹2,941 | ₹1,571 | 24.8% |
-| Uplift | ₹2,323 | ₹1,572 | 16.6% |
-| Net value | ₹2,323 | ₹1,572 | 16.6% |
-| Capacity-aware optimized | **₹4,672** | **₹1,575** | **50.0%** |
+| Random | ₹723 | ₹785 | 26.8% |
+| Propensity | ₹1,491 | ₹785 | 26.8% |
+| Uplift | ₹1,142 | ₹783 | 16.8% |
+| Net value | ₹1,142 | ₹783 | 16.8% |
+| Capacity-aware optimized | **₹2,038** | **₹788** | **50.0%** |
 
-The optimized-minus-random difference is **₹3,439 in aggregate**, or **₹6.88
+The optimized-minus-random difference is **₹1,315 in aggregate**, or **₹5.26
 per eligible user**. A user-level bootstrap with 500 fixed-policy resamples
-gives a 95% interval of **₹6.16 to ₹7.71 per user**. The interval is uncertainty
+gives a 95% interval of **₹4.18 to ₹6.47 per user**. The interval is uncertainty
 under this deterministic scenario, not a confidence interval for a live
 marketplace.
 
@@ -61,3 +61,12 @@ should not advance regardless of modeled value.
    outcome window. Pause or roll back on the thresholds in
    [`docs/rollout_plan.md`](rollout_plan.md).
 
+## Sensitivity check
+
+The pipeline also evaluates margin multipliers of 75%, 100%, and 125% and
+capacity equal to 20%, 28%, and 40% of positive modeled demand. The optimizer's
+advantage is reported for every cell in
+[`reports/business_case_sensitivity.csv`](../reports/business_case_sensitivity.csv)
+and visualized in `reports/figures/business_case_sensitivity.png`. This guards
+against making the headline depend on one favorable assumption grid; the
+scenario remains illustrative even where the advantage is positive.

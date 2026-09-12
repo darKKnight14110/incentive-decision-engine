@@ -18,9 +18,9 @@ Python/DuckDB pipeline with 44 tests.
 ## Business result bullet
 
 Built a capacity-aware synthetic marketplace scenario in which the optimized
-50%-budget policy generated ₹4,672 expected contribution margin versus ₹1,232
-for random allocation, a ₹3,439 aggregate difference (₹6.88 per eligible user;
-95% bootstrap interval ₹6.16–₹7.71), with all economics and capacity inputs
+50%-budget policy generated ₹2,038 expected contribution margin versus ₹723
+for random allocation, a ₹1,315 aggregate difference (₹5.26 per eligible user;
+95% bootstrap interval ₹4.18–₹6.47), with all economics and capacity inputs
 explicitly versioned and labelled as simulated.
 
 ## Measurement caveat bullet

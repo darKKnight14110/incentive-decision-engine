@@ -23,9 +23,9 @@ percentage points conversion ITT with a 95% interval from −0.33 to +0.91
 points. That interval crosses zero, so no positive Criteo impact is claimed.
 
 The separate synthetic marketplace business case is decision-shaped: at the
-canonical 50% budget, the capacity-aware optimizer produces ₹4,672 expected
-net contribution versus ₹1,232 for random allocation, or ₹6.88 more per
-eligible user (95% user-bootstrap interval ₹6.16 to ₹7.71). This is a simulated
+canonical 50% budget, the capacity-aware optimizer produces ₹2,038 expected
+net contribution versus ₹723 for random allocation, or ₹5.26 more per eligible
+user (95% user-bootstrap interval ₹4.18 to ₹6.47). This is a simulated
 estimated illustration with explicit economics and capacity, not realized
 impact. A geo-randomized pilot is the proposed validation step.
 

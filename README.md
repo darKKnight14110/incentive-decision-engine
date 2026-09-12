@@ -20,13 +20,18 @@ The checked-in offline run has two deliberately separate results:
    randomized rows, the conversion ITT is **+0.29 percentage points** with a
    95% interval of **−0.33 to +0.91 points**. The interval crosses zero, so the
    project does not claim positive advertising impact from this smoke fixture.
-2. **Business decision illustration.** On 500 deterministic synthetic
+2. **Business decision illustration.** On 250 deterministic synthetic
    marketplace users with explicit INR economics and city-hour capacity, the
-   capacity-aware optimizer produces **₹4,672 expected net contribution at the
-   canonical 50% budget versus ₹1,232 for random allocation**. The difference
-   is **₹3,439 in aggregate, or ₹6.88 per eligible user**, with a user-bootstrap
-   interval of **₹6.16 to ₹7.71 per user**. This is an estimated synthetic
+   capacity-aware optimizer produces **₹2,038 expected net contribution at the
+   canonical 50% budget versus ₹723 for random allocation**. The difference
+   is **₹1,315 in aggregate, or ₹5.26 per eligible user**, with a user-bootstrap
+   interval of **₹4.18 to ₹6.47 per user**. This is an estimated synthetic
    illustration, not realized business impact.
+
+The business-case advantage remains positive across the checked-in sensitivity
+grid for contribution margin at 75%, 100%, and 125% of the base assumption and
+capacity at 20%, 28%, and 40% of positive modeled demand. See the exact values
+in [the sensitivity table](reports/business_case_sensitivity.csv).
 
 The second result makes the business decision concrete without pretending that
 Criteo contains marketplace margins or delivery capacity. The assumptions are
@@ -87,6 +92,7 @@ first inputs to replace with validated unit economics in a production pilot.
 - [Synthetic business case](docs/business_case.md)
 - [Synthetic business claim](reports/business_case_claim.json)
 - [Matched-budget policy table](reports/business_case.csv)
+- [Business-case sensitivity](reports/business_case_sensitivity.csv)
 - [Technical appendix](docs/technical_appendix.md)
 - [Model card](docs/model_card.md)
 - [Rollout plan](docs/rollout_plan.md)

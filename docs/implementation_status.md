@@ -10,7 +10,7 @@ advertising assignment effects and held-out advertising policy value. INR
 economics, multi-action offer effects, capacity, and rollout outcomes are
 synthetic demonstrations and are labeled accordingly. The checked-in business
 case is now decision-shaped: at the canonical 50% budget, the capacity-aware
-optimizer yields ₹4,672 expected net contribution versus ₹1,232 for random on
-500 synthetic users, a ₹6.88 per-user advantage (95% bootstrap interval ₹6.16
-to ₹7.71). This is an estimated illustration under `configs/economics.yaml`,
+optimizer yields ₹2,038 expected net contribution versus ₹723 for random on
+250 synthetic users, a ₹5.26 per-user advantage (95% bootstrap interval ₹4.18
+to ₹6.47). This is an estimated illustration under `configs/economics.yaml`,
 not realized impact.

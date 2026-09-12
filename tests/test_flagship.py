@@ -71,6 +71,8 @@ def test_business_case_is_reproducible_and_has_a_decision_shaped_claim():
     assert claim == second.canonical_claim
     assert claim["optimized_expected_value_inr"] > claim["random_expected_value_inr"]
     assert claim["ci_low_inr_per_eligible_user"] > 0
+    assert len(first.sensitivity) == 9
+    assert first.sensitivity.incremental_value_vs_random_inr.min() > 0
     assert first.optimizer_result.assignments.user_id.is_unique
     assert first.optimizer_result.expected_cost <= float(
         first.candidates.loc[first.candidates.action == "small_offer", "expected_cost"].sum() * .5

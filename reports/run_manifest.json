@@ -16,17 +16,18 @@
   "business_case_claim": {
     "claim_type": "simulated_business_case",
     "canonical_budget_fraction": "0.5",
-    "optimized_expected_value_inr": 4671.70259437067,
-    "random_expected_value_inr": 1232.2775519908284,
-    "incremental_value_vs_random_inr_per_eligible_user": 6.8788500847596845,
-    "incremental_value_vs_random_inr_total": 3439.425042379842,
-    "relative_lift_vs_random_pct": 279.1112308118586,
-    "ci_low_inr_per_eligible_user": 6.163031192866654,
-    "ci_high_inr_per_eligible_user": 7.713280604114603,
-    "optimized_spend_inr": 1574.9999999999995,
+    "optimized_expected_value_inr": 2038.302910709346,
+    "random_expected_value_inr": 723.0431399873686,
+    "incremental_value_vs_random_inr_per_eligible_user": 5.261039082887908,
+    "incremental_value_vs_random_inr_total": 1315.2597707219775,
+    "relative_lift_vs_random_pct": 181.9061267554457,
+    "ci_low_inr_per_eligible_user": 4.177197142510585,
+    "ci_high_inr_per_eligible_user": 6.467070249532437,
+    "optimized_spend_inr": 787.4999999999995,
     "optimized_treatment_rate": 0.5,
     "interpretation": "Under the configured synthetic economics, the capacity-aware policy creates positive expected contribution margin versus random at the canonical 50% budget. This is an estimated illustration, not realized impact."
   },
+  "business_case_sensitivity_rows": 9,
   "platform": "3.12.6",
   "inputs": {}
 }

@@ -26,6 +26,7 @@ class BusinessCaseResult:
 
     candidates: pd.DataFrame
     policy_results: pd.DataFrame
+    sensitivity: pd.DataFrame
     canonical_claim: dict[str, float | str]
     optimizer_result: AllocationResult
 
@@ -112,7 +113,9 @@ def make_business_case_candidates(
                     "expected_margin": margin_inr,
                     "expected_cost": cost,
                     "expected_value": lift * margin_inr - cost,
-                    "expected_incremental_orders": max(0.0, lift),
+                    # Scale conversion lift into treatment-driven demand so
+                    # city-hour capacity is an active operational constraint.
+                    "expected_incremental_orders": max(0.0, lift) * 20.0,
                     "city_hour": user.city_hour,
                     "segment": user.segment,
                     # Used by the propensity baseline as a predictive score.
@@ -156,7 +159,7 @@ def run_business_case(
     small_cost = float(candidates.loc[candidates.action == "small_offer", "expected_cost"].sum())
     capacity = {
         city_hour: max(
-            4.0,
+            0.5,
             float(group[group.action != "no_offer"].expected_incremental_orders.sum())
             * float(assumptions.get("capacity_fraction_of_positive_demand", 0.28)),
         )
@@ -232,4 +235,51 @@ def run_business_case(
             "canonical 50% budget. This is an estimated illustration, not realized impact."
         ),
     }
-    return BusinessCaseResult(candidates, pd.DataFrame(rows), claim, canonical_optimizer)
+    policy_results = pd.DataFrame(rows)
+    sensitivity_rows: list[dict[str, float | str]] = []
+    base_margin = float(assumptions.get("contribution_margin_inr", 520.0))
+    for margin_multiplier in (0.75, 1.00, 1.25):
+        for capacity_fraction in (0.20, 0.28, 0.40):
+            scenario = candidates.copy()
+            scenario["expected_value"] = (
+                scenario.incremental_conversion * base_margin * margin_multiplier
+                - scenario.expected_cost
+            )
+            scenario_capacity = {
+                city_hour: max(
+                    0.5,
+                    float(group[group.action != "no_offer"].expected_incremental_orders.sum())
+                    * capacity_fraction,
+                )
+                for city_hour, group in scenario.groupby("city_hour")
+            }
+            scenario_optimizer = optimize_allocation(
+                scenario,
+                budget=small_cost * 0.50,
+                maximum_contact_volume=int(n_users * 0.50),
+                capacity=scenario_capacity,
+                minimum_roi=0.0,
+                return_shadow=False,
+            )
+            scenario_random = build_baseline_policy(
+                scenario, "random", small_cost * 0.50, seed=seed
+            )
+            opt_value = float(scenario_optimizer.expected_value)
+            random_value_scenario = float(scenario_random.expected_value.sum())
+            sensitivity_rows.append(
+                {
+                    "margin_multiplier": margin_multiplier,
+                    "capacity_fraction": capacity_fraction,
+                    "optimized_expected_value_inr": opt_value,
+                    "random_expected_value_inr": random_value_scenario,
+                    "incremental_value_vs_random_inr": opt_value - random_value_scenario,
+                    "optimized_contacts": float(scenario_optimizer.assignments.user_id.nunique()),
+                }
+            )
+    return BusinessCaseResult(
+        candidates,
+        policy_results,
+        pd.DataFrame(sensitivity_rows),
+        claim,
+        canonical_optimizer,
+    )

@@ -34,7 +34,7 @@ else:
         st.subheader("Matched-budget policy comparison")
         st.line_chart(pivot)
         selected=policies.iloc[(policies.budget_inr-budget).abs().argmin()]
-        st.caption(f"At the nearest budget point, the selected row is **{selected.policy}**. All policies use the same 500-user synthetic population.")
+        st.caption(f"At the nearest budget point, the selected row is **{selected.policy}**. All policies use the same 250-user synthetic population.")
     else:
         st.line_chart(data.set_index("budget_inr")[["expected_value"]])
     for name in ("profit_vs_budget.png","qini_comparison.png","uplift_deciles.png"):
