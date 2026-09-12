@@ -1,7 +1,7 @@
 {
   "schema_version": "claims-v1",
   "run_mode": "smoke",
-  "run_manifest_revision": "d73b3a5fe6eda92c946a6d348943756a4c18cdb5",
+  "run_manifest_revision": "d1715c6e37027f122a5f34aeb5eb271aac8bc509",
   "claims": [
     {
       "id": "criteo_conversion_itt",

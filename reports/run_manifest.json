@@ -68,8 +68,8 @@
     "ortools": "9.15.6755",
     "duckdb": "1.5.5"
   },
-  "git_revision": "d73b3a5fe6eda92c946a6d348943756a4c18cdb5",
-  "runtime_seconds": 34.12559309999051,
-  "peak_memory_bytes": 128119584,
+  "git_revision": "d1715c6e37027f122a5f34aeb5eb271aac8bc509",
+  "runtime_seconds": 49.106860499989125,
+  "peak_memory_bytes": 128118087,
   "claim_registry_path": "reports\\claim_registry.json"
 }
