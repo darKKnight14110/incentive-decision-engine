@@ -21,12 +21,16 @@ def optimize_allocation(candidates: pd.DataFrame, budget: float, maximum_contact
     required={"user_id","action","expected_value","expected_cost"}; missing=required-set(candidates.columns)
     if missing: raise ValueError(f"candidate contract missing {sorted(missing)}")
     if budget < 0: raise ValueError("budget must be non-negative")
-    frame=candidates.reset_index(drop=True).copy(); n=len(frame); values=frame.expected_value.to_numpy(float)
+    frame=candidates.reset_index(drop=True).copy(); n=len(frame); values=frame.expected_value.to_numpy(float); costs=frame.expected_cost.to_numpy(float)
+    if not np.isfinite(values).all() or not np.isfinite(costs).all():
+        raise ValueError("expected_value and expected_cost must be finite")
+    if (costs < 0).any():
+        raise ValueError("expected_cost cannot be negative")
     if "contact_allowed" in frame:
         frame = frame[(frame.contact_allowed.astype(bool)) | (frame.action == "no_offer")].reset_index(drop=True)
-        n, values = len(frame), frame.expected_value.to_numpy(float)
+        n, values, costs = len(frame), frame.expected_value.to_numpy(float), frame.expected_cost.to_numpy(float)
     integrality=np.ones(n); bounds=Bounds(np.zeros(n), np.ones(n)); rows=[]; lows=[]; highs=[]
-    rows.append(frame.expected_cost.to_numpy(float)); lows.append(-np.inf); highs.append(budget)
+    rows.append(costs); lows.append(-np.inf); highs.append(budget)
     for _, idx in frame.groupby("user_id").groups.items():
         row=np.zeros(n); row[list(idx)]=1; rows.append(row); lows.append(-np.inf); highs.append(1)
     if maximum_contact_volume is not None:

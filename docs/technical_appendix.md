@@ -5,9 +5,13 @@ cross-fitted response estimation, constrained allocation, and rollout control.
 Every result is labeled measured, estimated, or simulated.
 
 The Criteo ITT uses assignment as treatment and a difference in arm means with
-normal-approximation uncertainty. SRM is checked first. Uplift models are fit
-with disjoint folds and evaluated on held-out randomized rows. Policy value uses
-inverse-probability weighting with the known treatment probability.
+normal-approximation uncertainty. SRM is checked first. Full mode validates and
+partitions the compressed archive in bounded chunks, then streams every row for
+ITT and held-out policy evaluation. Uplift models are fit with disjoint folds
+and validation-only selection; final thresholds are locked before one untouched
+test evaluation. Policy value uses inverse-probability weighting with the known
+treatment probability. The bounded model-training cap is metadata, never a
+claim that the final-test population was subsampled.
 
 Synthetic marketplace candidates are priced with redemption-adjusted offer
 costs and solved as a multiple-choice integer program. Budget comparisons use

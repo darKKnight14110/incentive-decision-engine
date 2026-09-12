@@ -13,7 +13,7 @@ pre-treatment user snapshot
 segmentor -> opportunity table (user x action)
         |
         v
-budget pacer -> solver backend (HiGHS default; CP-SAT seam is optional)
+budget pacer -> solver backend (HiGHS default; CP-SAT validated alternative)
         |
         v
 assignment publisher -> auditable delivery queue
@@ -28,8 +28,9 @@ assignment publisher -> auditable delivery queue
   the remaining horizon, returning a recommended cycle budget and a pause/run
   status.
 - `src/policy/solver.py` provides a stable backend interface. SciPy/HiGHS is
-  deterministic and offline-friendly; the CP-SAT adapter fails loudly when the
-  optional dependency is absent rather than silently changing the solver.
+  deterministic and offline-friendly; the CP-SAT adapter uses integer paise and
+  milli-unit capacity coefficients and is checked against HiGHS on a tiny
+  exhaustive fixture. It remains optional for the offline smoke build.
 - `src/orchestration/targeting.py` is the decision boundary that composes the
   pacer and solver against the shared candidate contract.
 - `src/assignments/publisher.py` writes one-row-per-user assignments with
@@ -37,8 +38,9 @@ assignment publisher -> auditable delivery queue
 
 The business case calls this boundary at the canonical budget, while the full
 policy grid and sensitivity analysis remain explicit and reproducible. Criteo
-supplies measured incrementality; INR economics and capacity are synthetic
-illustrations, clearly labelled in the reports.
+supplies measured incrementality only in a successful full-data run; smoke
+outputs are simulated Criteo-shaped checks. INR economics and capacity are
+synthetic illustrations, clearly labelled in the reports.
 
 ## Why segmentation is optional
 

@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.experimentation.criteo import partition_criteo, scan_criteo, smoke_criteo, validate_criteo_frame, write_criteo_partitions, iter_partition
+from src.experimentation.criteo import partition_criteo, scan_criteo, smoke_criteo, validate_criteo_frame, write_criteo_partitions, iter_partition, download_criteo
 from src.experimentation.diagnostics import aa_pvalues, sample_ratio_mismatch
 from src.experimentation.estimation import estimate_itt, estimate_itt_stream
 from src.causal.estimators import difference_in_means, doubly_robust
@@ -14,13 +14,14 @@ from src.causal.recovery import benchmark_estimators, summarize_recovery
 from src.marketplace.geo_experiment import geo_experiment_design
 from src.monitoring.drift import population_stability_index
 from src.policy.optimize import optimize_allocation
+from src.policy.heuristics import exhaustive_allocation
 from src.policy.solver import CpSatSolver, HiGHSSolver
-from src.prediction.propensity import fit_propensity_models
+from src.prediction.propensity import fit_propensity_models, select_propensity_model
 from src.policy.business_case import run_business_case
 from src.policy.pacer import BudgetPacer, BudgetPacerConfig
 from src.orchestration.targeting import TargetingRunConfig, run_targeting
 from src.assignments.publisher import publish_assignments
-from src.segmentation.segmentor import ClusterSegmentor, RuleBasedSegmentor
+from src.segmentation.segmentor import ClusterSegmentor, RuleBasedSegmentor, cluster_stability_report
 
 
 def test_smoke_criteo_is_valid_and_partitioned_deterministically():
@@ -44,6 +45,18 @@ def test_stream_itt_and_partition_manifest_match_in_memory(tmp_path):
     manifest = write_criteo_partitions(path, tmp_path / "parts", seed=7, chunksize=113)
     assert sum(manifest["counts"].values()) == len(frame)
     assert len(pd.concat(list(iter_partition(tmp_path / "parts", "test")))) == manifest["counts"]["test"]
+
+
+def test_download_checks_disk_and_never_overwrites_existing_archive(tmp_path, monkeypatch):
+    import src.experimentation.criteo as criteo_module
+
+    monkeypatch.setattr(criteo_module.shutil, "disk_usage", lambda _: type("Usage", (), {"free": 10})())
+    with pytest.raises(OSError, match="insufficient free disk"):
+        download_criteo(tmp_path, url="https://example.invalid/data.csv.gz", minimum_free_bytes=100)
+    archive = tmp_path / "data.csv.gz"
+    archive.write_bytes(b"existing")
+    (tmp_path / "manifest.json").write_text("{}", encoding="utf-8")
+    assert download_criteo(tmp_path, url="https://example.invalid/data.csv.gz") == archive
 
 
 def test_criteo_rejects_schema_and_post_treatment_column():
@@ -82,6 +95,23 @@ def test_optimizer_obeys_budget_and_one_action_constraint():
     assert result.assignments.user_id.is_unique
 
 
+def test_exhaustive_oracle_matches_highs_on_tiny_fixture():
+    frame = pd.DataFrame({
+        "user_id": ["u1", "u1", "u2", "u2", "u3", "u3"],
+        "action": ["no_offer", "a", "no_offer", "a", "no_offer", "a"],
+        "expected_value": [0, 8, 0, 7, 0, 6],
+        "expected_cost": [0, 5, 0, 5, 0, 5],
+        "segment": ["base"] * 6,
+        "city_hour": ["c1"] * 6,
+        "expected_incremental_orders": [0, 1, 1, 1, 1, 1],
+    })
+    exact = exhaustive_allocation(frame, 10, maximum_contact_volume=2, capacity={"c1": 1.5})
+    highs = HiGHSSolver().solve(
+        frame, 10, maximum_contact_volume=2, capacity={"c1": 1.5}, return_shadow=False
+    )
+    assert highs.expected_value == pytest.approx(float(exact.expected_value.sum()))
+
+
 def test_geo_design_and_psi_are_finite():
     assert geo_experiment_design(10, .2, 100).minimum_detectable_effect > 0
     assert population_stability_index(np.arange(10), np.arange(10)) < .01
@@ -115,6 +145,18 @@ def test_segmentors_are_versioned_and_leakage_safe():
         ClusterSegmentor(n_clusters=2).fit(
             pd.DataFrame({"treatment": [0, 1], "x": [0.0, 1.0]}), ["treatment", "x"]
         )
+
+
+def test_cluster_stability_is_train_only_and_reproducible():
+    rng = np.random.default_rng(4)
+    train = pd.DataFrame({"x0": rng.normal(size=120), "x1": rng.normal(size=120)})
+    validation = pd.DataFrame({"x0": rng.normal(size=60), "x1": rng.normal(size=60)})
+    first = cluster_stability_report(train, validation, ["x0", "x1"], cluster_counts=(2, 3), seeds=(1, 2, 3))
+    second = cluster_stability_report(train, validation, ["x0", "x1"], cluster_counts=(2, 3), seeds=(1, 2, 3))
+    pd.testing.assert_frame_equal(first, second)
+    assert set(first.columns) >= {"ari_stability", "silhouette_mean", "stability_gate_passed"}
+    with pytest.raises(ValueError, match="post-treatment"):
+        cluster_stability_report(train.assign(conversion=0), validation.assign(conversion=0), ["x0", "conversion"])
 
 
 def test_budget_pacer_reconciles_liability_and_pauses_when_exhausted():
@@ -162,6 +204,16 @@ def test_higher_fidelity_models_and_solver_backends_have_contract_parity(tmp_pat
     cpsat = CpSatSolver().solve(candidates, 50, return_shadow=False)
     assert cpsat.expected_value == pytest.approx(highs.expected_value)
     assert cpsat.expected_cost <= 50
+
+
+def test_propensity_selection_reports_seed_stability():
+    rng = np.random.default_rng(8)
+    x = rng.normal(size=(180, 4))
+    y = rng.binomial(1, 1 / (1 + np.exp(-x[:, 0])))
+    selected = select_propensity_model(x[:120], y[:120], x[120:], y[120:], seeds=(1, 2, 3))
+    assert selected.selected_model in {"logistic", "lightgbm"}
+    assert set(selected.validation_metrics) == {"logistic", "lightgbm"}
+    assert "log_loss_std" in selected.stability[selected.selected_model]
 
 
 def test_model_selection_is_validation_only_and_recovery_has_typed_summary():

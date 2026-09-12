@@ -14,6 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
+from sklearn.metrics import adjusted_rand_score, silhouette_score
 from sklearn.preprocessing import StandardScaler
 
 
@@ -153,3 +154,63 @@ class ClusterSegmentor:
             )
             for segment_id, group in segmented.groupby("segment_id", sort=True)
         ]
+
+
+def cluster_stability_report(
+    train_frame: pd.DataFrame,
+    validation_frame: pd.DataFrame,
+    feature_columns: list[str],
+    cluster_counts: tuple[int, ...] = (2, 3, 4, 5),
+    seeds: tuple[int, ...] = (11, 29, 47, 71, 101),
+) -> pd.DataFrame:
+    """Measure train-only K-means stability on a held-out validation snapshot.
+
+    Scaling, centroids, and labels are fit independently on ``train_frame``.
+    Validation rows are used only to compare silhouette quality and agreement
+    across seeded fits.  The returned table is therefore safe to use as a
+    diagnostic gate without leaking outcomes or treatment into segmentation.
+    """
+
+    if not cluster_counts or not seeds:
+        raise ValueError("cluster_counts and seeds must be non-empty")
+    validate_segment_features(train_frame, feature_columns)
+    validate_segment_features(validation_frame, feature_columns)
+    rows: list[dict[str, float | int | bool]] = []
+    for n_clusters in cluster_counts:
+        if n_clusters < 2:
+            raise ValueError("cluster counts must be at least two")
+        labels_by_seed: list[np.ndarray] = []
+        silhouettes: list[float] = []
+        for seed in seeds:
+            segmentor = ClusterSegmentor(n_clusters=n_clusters, seed=seed).fit(train_frame, feature_columns)
+            assert segmentor.scaler is not None and segmentor.model is not None
+            scaled_validation = segmentor.scaler.transform(validation_frame[feature_columns].astype(float))
+            labels = segmentor.model.predict(scaled_validation)
+            labels_by_seed.append(labels)
+            silhouettes.append(
+                float(silhouette_score(scaled_validation, labels))
+                if len(np.unique(labels)) > 1 and len(validation_frame) > n_clusters
+                else float("nan")
+            )
+        pairwise = [
+            adjusted_rand_score(left, right)
+            for index, left in enumerate(labels_by_seed)
+            for right in labels_by_seed[index + 1 :]
+        ]
+        rows.append(
+            {
+                "n_clusters": int(n_clusters),
+                "ari_stability": float(np.mean(pairwise)) if pairwise else float("nan"),
+                "ari_min": float(np.min(pairwise)) if pairwise else float("nan"),
+                "silhouette_mean": float(np.nanmean(silhouettes)),
+                "silhouette_min": float(np.nanmin(silhouettes)),
+                "stability_gate_passed": bool(pairwise and np.mean(pairwise) >= 0.80),
+            }
+        )
+    report = pd.DataFrame(rows)
+    report["selected_diagnostic"] = False
+    eligible = report[report.stability_gate_passed]
+    if not eligible.empty:
+        winner = eligible.sort_values(["silhouette_mean", "ari_stability", "n_clusters"], ascending=[False, False, True]).index[0]
+        report.loc[winner, "selected_diagnostic"] = True
+    return report

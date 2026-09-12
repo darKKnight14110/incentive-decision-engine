@@ -24,6 +24,7 @@ reports/*
 !reports/assignments.csv
 !reports/optimizer_benchmark.json
 !reports/run_manifest.json
+!reports/claim_registry.json
 !reports/experiment_readout.pdf
 !reports/executive_case_study.pdf
 !reports/interview_deck.pptx

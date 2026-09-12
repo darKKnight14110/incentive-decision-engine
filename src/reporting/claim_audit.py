@@ -32,6 +32,20 @@ def audit_claims(root: str | Path = ".") -> list[str]:
         errors.append("business-case manifest must be labelled simulated_business_case")
     if "not realized business impact" not in readme.lower():
         errors.append("README must state that synthetic business value is not realized impact")
+    registry_path = base / "reports" / "claim_registry.json"
+    if not registry_path.exists():
+        errors.append("reports/claim_registry.json is missing; rerun the pipeline")
+    else:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        claims = {claim.get("id"): claim for claim in registry.get("claims", [])}
+        if registry.get("schema_version") != "claims-v1":
+            errors.append("claim registry schema version is unsupported")
+        if "criteo_conversion_itt" not in claims or "synthetic_marketplace_policy" not in claims:
+            errors.append("claim registry must contain Criteo ITT and synthetic policy claims")
+        if mode == "smoke" and claims.get("criteo_conversion_itt", {}).get("label") != "simulated":
+            errors.append("smoke Criteo claim must be labelled simulated in the registry")
+        if claims.get("synthetic_marketplace_policy", {}).get("label") != "estimated illustration":
+            errors.append("synthetic policy claim must be labelled estimated illustration")
     benchmark_path = base / "reports" / "optimizer_benchmark.json"
     if not benchmark_path.exists():
         errors.append("reports/optimizer_benchmark.json is missing; run make benchmark first")

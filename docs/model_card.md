@@ -5,9 +5,14 @@ under a fixed budget. The Criteo model is a binary advertising response model;
 multi-action offer decisions are demonstrated separately on synthetic data.
 
 **Training and evaluation.** Features are the 12 anonymized pre-treatment
-Criteo fields. Training, validation, cross-fitting, and final-test rows are
-disjoint. Evaluation uses uplift deciles, Qini/AUUC, randomized policy value,
-and bootstrap intervals. Predictive AUC is not treated as uplift evidence.
+Criteo fields. Calibrated logistic regression and LightGBM are predictive
+baselines; their log loss, Brier score, calibration error, PR-AUC, and seed
+stability are diagnostics, not causal evidence. Training, validation,
+cross-fitting, and final-test rows are disjoint. Full-data ITT and final policy
+value stream every validated row, while model fitting is bounded by the
+configured training cap recorded in the run manifest. Evaluation uses uplift
+deciles, Qini/AUUC, randomized policy value, and fixed-policy bootstrap
+intervals.
 
 **Limitations.** Individual effects are estimates, not observed truth. The
 bootstrap holds the fitted ranking fixed and does not include model-selection

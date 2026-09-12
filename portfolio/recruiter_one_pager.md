@@ -13,6 +13,7 @@ evidence into budget- and capacity-constrained promotion allocations.
 - Evaluates uplift on held-out randomized data with policy value, Qini/AUUC, and bootstrap intervals.
 - Converts response estimates into redemption-adjusted contribution margin.
 - Solves a multiple-choice knapsack with budget, contact, ROI, and city-hour constraints.
+- Cross-checks HiGHS against an OR-Tools CP-SAT backend and a bounded exhaustive oracle.
 - Uses an interview-defendable targeting architecture: leakage-safe segmentor,
   finite-horizon budget pacer, pluggable solver seam, and versioned assignment
   publisher.

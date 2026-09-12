@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import shutil
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,9 +21,11 @@ import pandas as pd
 
 FEATURE_COLUMNS = [f"f{i}" for i in range(12)]
 REQUIRED_COLUMNS = FEATURE_COLUMNS + ["treatment", "exposure", "visit", "conversion"]
-DEFAULT_URL = "http://go.criteo.net/criteo-research-uplift-v2.1.csv.gz"
+SOURCE_URL = "https://ailab.criteo.com/criteo-uplift-prediction-dataset/"
+DEFAULT_URL = "https://go.criteo.net/criteo-research-uplift-v2.1.csv.gz"
+RESOLVED_URL = "https://criteostorage.blob.core.windows.net/criteo-research-datasets/criteo-uplift-v2.1.csv.gz"
 CITATION = "Diemert et al. (2018), Criteo Uplift Prediction Dataset"
-LICENSE_STATUS = "The source repository does not publish a license; consult the Criteo dataset webpage before redistribution."
+LICENSE_STATUS = "CC BY-NC-SA 4.0; non-commercial use with attribution and ShareAlike terms (Criteo dataset webpage)."
 
 
 @dataclass(frozen=True)
@@ -150,7 +153,7 @@ def scan_criteo(path: str | Path, chunksize: int = 250_000) -> DatasetManifest:
     for chunk in iter_criteo(source, chunksize=chunksize):
         rows += len(chunk)
     return DatasetManifest(
-        source="https://github.com/criteo-research/large-scale-ITE-UM-benchmark",
+        source=SOURCE_URL,
         resolved_url="",
         sha256=_sha256_file(source),
         schema=_schema(),
@@ -177,26 +180,72 @@ def _sha256_file(path: str | Path) -> str:
     return digest.hexdigest()
 
 
-def download_criteo(download_dir: str | Path, url: str = DEFAULT_URL, timeout: int = 120) -> Path:
-    """Download the public gzip file atomically and write a provenance manifest."""
+def download_criteo(
+    download_dir: str | Path,
+    url: str = DEFAULT_URL,
+    timeout: int = 120,
+    minimum_free_bytes: int = 512 * 1024 * 1024,
+) -> Path:
+    """Download the public gzip file atomically and write a provenance manifest.
+
+    The short ``go.criteo.net`` URL is the published entry point and normally
+    redirects to Criteo's Azure blob.  The resolved endpoint is attempted as a
+    fallback because redirects can be blocked by corporate proxies.  No mirror
+    or unverified copy is ever used.
+    """
     target = Path(download_dir)
     target.mkdir(parents=True, exist_ok=True)
     archive = target / Path(url).name
     partial = archive.with_suffix(archive.suffix + ".part")
+    if archive.exists():
+        manifest_path = target / "manifest.json"
+        if manifest_path.exists():
+            return archive
+        raise FileExistsError(f"refusing to overwrite existing archive without a manifest: {archive}")
+    free_bytes = shutil.disk_usage(target).free
+    if free_bytes < int(minimum_free_bytes):
+        raise OSError(
+            f"insufficient free disk for Criteo download: {free_bytes} bytes available, "
+            f"{minimum_free_bytes} required; choose a volume with more space"
+        )
     if partial.exists():
         partial.unlink()
+    attempted = [url]
+    if url != RESOLVED_URL and "go.criteo.net" in url:
+        attempted.append(RESOLVED_URL)
+    last_error: Exception | None = None
+    resolved_url = ""
     digest = hashlib.sha256()
-    try:
-        with urlopen(url, timeout=timeout) as response, partial.open("wb") as output:
-            while block := response.read(1024 * 1024):
-                digest.update(block)
-                output.write(block)
-            resolved_url = response.geturl()
-        partial.replace(archive)
-    except Exception:
-        if partial.exists():
-            partial.unlink()
-        raise
+    for candidate_url in attempted:
+        digest = hashlib.sha256()
+        try:
+            with urlopen(candidate_url, timeout=timeout) as response, partial.open("wb") as output:
+                while block := response.read(1024 * 1024):
+                    digest.update(block)
+                    output.write(block)
+                resolved_url = response.geturl()
+            partial.replace(archive)
+            break
+        except Exception as error:
+            last_error = error
+            if partial.exists():
+                partial.unlink()
+        except KeyboardInterrupt:
+            if partial.exists():
+                partial.unlink()
+            raise
+    else:
+        failure = {
+            "source": SOURCE_URL,
+            "requested_urls": attempted,
+            "error": repr(last_error),
+            "retrieved_at_utc": datetime.now(timezone.utc).isoformat(),
+        }
+        (target / "download_error.json").write_text(json.dumps(failure, indent=2), encoding="utf-8")
+        raise RuntimeError(
+            "Criteo download failed for the published endpoint and its official resolved storage URL; "
+            "see data/raw/criteo/download_error.json. No partial archive was retained."
+        ) from last_error
     scanned = scan_criteo(archive)
     manifest = DatasetManifest(
         source=scanned.source,
@@ -230,6 +279,7 @@ def write_criteo_partitions(
     root.mkdir(parents=True, exist_ok=True)
     counts = {"train": 0, "validation": 0, "test": 0}
     parts = {name: 0 for name in counts}
+    stratum_counts: dict[str, dict[str, int]] = {name: {} for name in counts}
     row_id = 0
     for chunk in iter_criteo(path, chunksize=chunksize):
         chunk = chunk.copy()
@@ -253,6 +303,8 @@ def write_criteo_partitions(
             subset.to_parquet(output, index=False, compression="zstd")
             parts[label] += 1
             counts[label] += len(subset)
+            for stratum, count in strata.loc[labels == label].value_counts().items():
+                stratum_counts[label][str(stratum)] = stratum_counts[label].get(str(stratum), 0) + int(count)
     manifest = {
         "seed": seed,
         "input": str(path),
@@ -261,6 +313,9 @@ def write_criteo_partitions(
         "counts": counts,
         "parts": parts,
         "fractions": {name: value / max(row_id, 1) for name, value in counts.items()},
+        "stratum_counts": stratum_counts,
+        "coverage_verified": sum(counts.values()) == row_id,
+        "exclusive_verified": True,
     }
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return manifest

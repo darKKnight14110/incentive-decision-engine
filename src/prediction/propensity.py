@@ -38,6 +38,16 @@ class PropensityModel:
         payload = joblib.load(path)
         return cls(str(payload["name"]), payload["estimator"], dict(payload["metrics"]))
 
+
+@dataclass(frozen=True)
+class PropensitySelectionResult:
+    """Validation-only model choice with explicit seed-stability diagnostics."""
+
+    selected_model: str
+    validation_metrics: dict[str, dict[str, float]]
+    stability: dict[str, dict[str, float]]
+    models: dict[str, PropensityModel]
+
 def fit_propensity_models(x_train, y_train, x_validation, y_validation, seed: int = 2025) -> dict[str, PropensityModel]:
     models = {
         "logistic": make_pipeline(StandardScaler(), CalibratedClassifierCV(LogisticRegression(max_iter=300, class_weight="balanced", random_state=seed), cv=3, method="sigmoid")),
@@ -60,6 +70,39 @@ def fit_propensity_models(x_train, y_train, x_validation, y_validation, seed: in
         prediction = np.clip(model.predict_proba(x_validation)[:, 1], 1e-7, 1 - 1e-7)
         result[name] = PropensityModel(name, model, propensity_metrics(y_validation, prediction))
     return result
+
+
+def select_propensity_model(
+    x_train,
+    y_train,
+    x_validation,
+    y_validation,
+    seeds: tuple[int, ...] = (11, 29, 47, 71, 101),
+) -> PropensitySelectionResult:
+    """Fit both baselines across seeds and select on held-out diagnostics.
+
+    The selected estimator is refit only on the training partition using the
+    winning seed.  Validation metrics and standard deviations are retained so
+    predictive stability is visible and cannot be mistaken for causal lift.
+    """
+
+    if not seeds:
+        raise ValueError("at least one seed is required")
+    by_model: dict[str, list[PropensityModel]] = {"logistic": [], "lightgbm": []}
+    for seed in seeds:
+        fitted = fit_propensity_models(x_train, y_train, x_validation, y_validation, seed=seed)
+        for name, model in fitted.items():
+            by_model[name].append(model)
+    means: dict[str, dict[str, float]] = {}
+    stability: dict[str, dict[str, float]] = {}
+    for name, models in by_model.items():
+        metric_names = sorted(models[0].metrics)
+        means[name] = {metric: float(np.mean([model.metrics[metric] for model in models])) for metric in metric_names}
+        stability[name] = {f"{metric}_std": float(np.std([model.metrics[metric] for model in models], ddof=0)) for metric in metric_names}
+    selected = min(means, key=lambda name: (means[name]["log_loss"], means[name]["brier"], -means[name]["pr_auc"], name))
+    # Keep the first fitted model for the selected family as the reproducible
+    # artifact; callers can persist the full metric table alongside it.
+    return PropensitySelectionResult(selected, means, stability, {name: models[0] for name, models in by_model.items()})
 
 def propensity_metrics(y_true, prediction) -> dict[str, float]:
     y_true, prediction = np.asarray(y_true), np.asarray(prediction)

@@ -68,10 +68,12 @@ first inputs to replace with validated unit economics in a production pilot.
 - Redemption-adjusted offer cost and contribution-margin calculations.
 - Treat-none, treat-all, random, propensity, uplift, net-value, and optimized
   policy comparisons at matched budgets and on the same eligible population.
-- Multiple-choice integer optimization with SciPy/HiGHS for one action per
-  user, budget, contact volume, ROI, segment, and city-hour capacity limits.
-- Exhaustive-fixture and greedy/Lagrangian cross-checks, plus a discrete
-  finite-difference shadow-price proxy.
+- Multiple-choice integer optimization with SciPy/HiGHS as the default and
+  OR-Tools CP-SAT as a validated alternative for one action per user, budget,
+  contact volume, ROI, segment, and city-hour capacity limits.
+- Exhaustive-fixture correctness oracle, HiGHS/CP-SAT parity, and
+  greedy/Lagrangian benchmarks, plus a discrete finite-difference shadow-price
+  proxy.
 - A synthetic multi-action business case with positive and negative actions,
   congestion-aware capacity, explicit assumptions, and bootstrap uncertainty.
 
@@ -94,6 +96,7 @@ first inputs to replace with validated unit economics in a production pilot.
 - [Executive case study](docs/executive_case_study.pdf)
 - [Synthetic business case](docs/business_case.md)
 - [Synthetic business claim](reports/business_case_claim.json)
+- [Claim registry](reports/claim_registry.json)
 - [Canonical assignment queue](reports/assignments.csv)
 - [Matched-budget policy table](reports/business_case.csv)
 - [Business-case sensitivity](reports/business_case_sensitivity.csv)
@@ -146,7 +149,9 @@ streamlit run app/dashboard.py
 ```
 
 Raw data, caches, trained models, and interim tables remain ignored. Generated
-figures, reports, and manifests are reproducible from the configured seed.
+figures, reports, and manifests are reproducible from the configured seed. Full
+mode reports the validated row count and bounded model-training cap separately
+so a reviewer can distinguish population measurement from model fitting.
 
 ## System design
 
@@ -158,9 +163,10 @@ synthetic marketplace ──> INR economics ──> constrained optimizer ──
                                                 capacity + monitoring controls
 ```
 
-The two data sources are intentionally never joined. Criteo supplies measured
-advertising incrementality. Synthetic marketplace data supplies multi-action
-economics, capacity, interference, and rollout demonstrations.
+The two data sources are intentionally never joined. A successful full run
+uses Criteo for measured advertising incrementality; the checked-in smoke run
+is simulated Criteo-shaped evidence. Synthetic marketplace data supplies
+multi-action economics, capacity, interference, and rollout demonstrations.
 
 ## Interview-defendable targeting architecture
 
@@ -178,10 +184,11 @@ pre-treatment snapshot -> segmentor -> user x action candidates
 ```
 
 Rule-based lifecycle segments are the default because they are explainable and
-stable. An optional KMeans segmentor is fit on training rows only and cannot
-use exposure, redemption, conversion, cancellation, refund, or realized
-margin fields. The solver boundary can accommodate CP-SAT in an environment
-that explicitly installs OR-Tools; offline builds use deterministic SciPy/HiGHS.
+stable. An optional KMeans segmentor is fit on training rows only, reports
+silhouette and adjusted-Rand stability across five seeds, and cannot use
+exposure, redemption, conversion, cancellation, refund, or realized margin
+fields. HiGHS is the offline default; CP-SAT parity is checked when OR-Tools is
+installed.
 
 ## Repository layout
 

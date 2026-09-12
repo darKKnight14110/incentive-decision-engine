@@ -12,8 +12,8 @@ contracts, held-out policy evaluation, staged rollout gates, and drift monitorin
 
 Implemented SRM/balance diagnostics, ITT and power analysis, constant/T/X/DR
 learners, Qini/AUUC and randomized policy-value evaluation, known-ground-truth
-estimator recovery, and SciPy/HiGHS constrained optimization in a reproducible
-Python/DuckDB pipeline with 44 tests.
+estimator recovery, and SciPy/HiGHS plus CP-SAT constrained optimization in a
+reproducible Python/DuckDB pipeline with 50 tests.
 
 ## Business result bullet
 
@@ -31,7 +31,6 @@ geo-randomized pilot rather than claiming unsupported advertising impact.
 
 ## Customization rule
 
-Do not present the synthetic business-case result as realized impact. Replace
-or supplement it with a production percentage only after running the full
-Criteo reproduction and confirming a positive held-out policy-value interval
-at a named matched budget.
+Do not present the synthetic business-case result as realized impact. After a
+full Criteo reproduction, report the locked held-out interval as measured even
+when it crosses zero; never search the final test set for a positive result.

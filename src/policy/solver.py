@@ -79,6 +79,10 @@ class CpSatSolver:
         capacity_scale = 1000
         values = frame.expected_value.astype(float).to_numpy()
         costs = frame.expected_cost.astype(float).to_numpy()
+        if not np.isfinite(values).all() or not np.isfinite(costs).all():
+            raise ValueError("expected_value and expected_cost must be finite")
+        if (costs < 0).any():
+            raise ValueError("expected_cost cannot be negative")
         value_int = np.rint(values * value_scale).astype(int)
         cost_int = np.rint(costs * cost_scale).astype(int)
         model = cp_model.CpModel()

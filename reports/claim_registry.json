@@ -1,0 +1,28 @@
+{
+  "schema_version": "claims-v1",
+  "run_mode": "smoke",
+  "run_manifest_revision": "d73b3a5fe6eda92c946a6d348943756a4c18cdb5",
+  "claims": [
+    {
+      "id": "criteo_conversion_itt",
+      "label": "simulated",
+      "source": "Criteo randomized advertising assignment",
+      "outcome": "conversion",
+      "point": 0.002906982387487359,
+      "ci_low": -0.003313348731680343,
+      "ci_high": 0.00912731350665506,
+      "rows": 12000,
+      "caveat": "Smoke is a simulated Criteo-shaped fixture; full mode streams the validated archive."
+    },
+    {
+      "id": "synthetic_marketplace_policy",
+      "label": "estimated illustration",
+      "source": "Seeded synthetic marketplace economics and capacity",
+      "point_inr_per_user": 5.261039082887908,
+      "ci_low_inr_per_user": 4.177197142510585,
+      "ci_high_inr_per_user": 6.467070249532437,
+      "budget_fraction": 0.5,
+      "caveat": "Not realized business impact; replace assumptions with finance-approved economics and geo validation."
+    }
+  ]
+}
