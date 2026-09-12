@@ -5,16 +5,16 @@
       "expected_value": 717.0,
       "expected_cost": 320.0,
       "assignments": 40,
-      "runtime_seconds": 0.09480590000748634,
-      "peak_memory_bytes": 338192,
+      "runtime_seconds": 0.1392366999934893,
+      "peak_memory_bytes": 337928,
       "rounding_error": 0.0
     },
     "cp-sat": {
       "expected_value": 717.0,
       "expected_cost": 320.0,
       "assignments": 40,
-      "runtime_seconds": 0.33945619998848997,
-      "peak_memory_bytes": 1124222,
+      "runtime_seconds": 0.7456776000035461,
+      "peak_memory_bytes": 1125483,
       "rounding_error": 0.0
     }
   },
