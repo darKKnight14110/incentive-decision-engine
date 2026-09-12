@@ -12,7 +12,7 @@ This repository describes an incentive-allocation and budget-constrained decisio
 - `configs/`: named economic assumptions and policy constraints.
 - `data/` and `reports/`: generated or local-only data and figures; raw/interim data should remain gitignored.
 
-Read `project.md` and `Learn_n_build.md` before changing modeling or causal code. Treat Criteo as randomized advertising data, not churn data.
+Read `project.md` and the relevant experiment/model documentation in `docs/` before changing modeling or causal code. Treat Criteo as randomized advertising data, not churn data.
 
 ## Build, Test, and Development Commands
 

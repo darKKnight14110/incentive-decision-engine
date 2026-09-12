@@ -1,6 +1,6 @@
 # Increment — Architecture, Decision Log, and Interview Defence
 
-**Companion to:** `increment_decision_engine_project_plan.md` (what to build) and `Learn_n_build.md` (how to learn it).
+**Companion to:** `increment_decision_engine_project_plan.md` (what to build) and the tracked evidence in `docs/` and `reports/`.
 
 **What this document is for.** Two things, in this order:
 1. The **high-level design** of the system: components, contracts, data flow, and the decision log that explains why each piece is the way it is.
@@ -626,7 +626,7 @@ Organised by the way interviews are actually structured. For the high-value ques
 - *Skeleton:* Fan-out from a non-unique join key. Catch it with a row-count invariance assertion before and after the join, plus a `HAVING COUNT(*) > 1` duplicate check on the join key in the contract layer. In my pipeline this is a build-time gate, not a manual check.
 
 **Q. Write a query for weekly cohort retention.** / **Rolling 30-day margin per user as of an arbitrary timestamp.** / **Second-highest order value per city.**
-- Practise these until they're muscle memory. See `Learn_n_build.md` §M3.
+- Practise these until they're muscle memory. The implemented query patterns are documented in `docs/technical_appendix.md`.
 
 **Rapid fire.** Grain of your fact table? Difference between `RANK`, `DENSE_RANK`, `ROW_NUMBER`? When is a window frame `ROWS` vs `RANGE`? How do you find gaps in a sequence? Why `NOT EXISTS` over `NOT IN`? What breaks when you `LEFT JOIN` then filter on the right table in `WHERE`?
 
