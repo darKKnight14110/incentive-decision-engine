@@ -22,7 +22,7 @@ The checked-in evidence has three deliberately separate results:
    percentage points** (95% CI **+0.103 to +0.134**) at the validation-selected
    threshold. Validation selected the constant-effect baseline over the
    T-learner, so the correct conclusion is **reliable heterogeneity was not
-   established**. Full runtime was 159 seconds with a 183 MB peak-memory
+   established**. Full runtime was 139 seconds with a 183 MB peak-memory
    snapshot on the recorded environment.
 2. **Smoke inference check.** On 12,000 deterministic, simulated
    Criteo-shaped randomized rows, the conversion ITT is **+0.29 percentage
