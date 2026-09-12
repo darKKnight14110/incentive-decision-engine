@@ -21,6 +21,7 @@ reports/*
 !reports/business_case.csv
 !reports/business_case_claim.json
 !reports/business_case_sensitivity.csv
+!reports/assignments.csv
 !reports/run_manifest.json
 !reports/experiment_readout.pdf
 !reports/executive_case_study.pdf

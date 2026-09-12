@@ -91,6 +91,7 @@ first inputs to replace with validated unit economics in a production pilot.
 - [Executive case study](docs/executive_case_study.pdf)
 - [Synthetic business case](docs/business_case.md)
 - [Synthetic business claim](reports/business_case_claim.json)
+- [Canonical assignment queue](reports/assignments.csv)
 - [Matched-budget policy table](reports/business_case.csv)
 - [Business-case sensitivity](reports/business_case_sensitivity.csv)
 - [Technical appendix](docs/technical_appendix.md)
@@ -153,6 +154,27 @@ The two data sources are intentionally never joined. Criteo supplies measured
 advertising incrementality. Synthetic marketplace data supplies multi-action
 economics, capacity, interference, and rollout demonstrations.
 
+## Interview-defendable targeting architecture
+
+The decision engine follows a modular, public-architecture pattern: an
+orchestrator coordinates a leakage-safe segmentor, a budget pacer, a pluggable
+solver, and an idempotent assignment publisher. The implementation is inspired
+by public Uber Tarot engineering descriptions, but contains no proprietary
+code. See [the architecture note](docs/architecture.md) for the contracts and
+trade-offs.
+
+```text
+pre-treatment snapshot -> segmentor -> user x action candidates
+                                  -> budget pacer -> HiGHS optimizer
+                                  -> versioned assignment queue
+```
+
+Rule-based lifecycle segments are the default because they are explainable and
+stable. An optional KMeans segmentor is fit on training rows only and cannot
+use exposure, redemption, conversion, cancellation, refund, or realized
+margin fields. The solver boundary can accommodate CP-SAT in an environment
+that explicitly installs OR-Tools; offline builds use deterministic SciPy/HiGHS.
+
 ## Repository layout
 
 ```text
@@ -160,6 +182,9 @@ src/experimentation/  Criteo loading, diagnostics, ITT, power
 src/prediction/       calibrated propensity baselines
 src/causal/           simulations, estimators, meta-learners, uplift metrics
 src/policy/           value conversion, baselines, optimizer, business case
+src/segmentation/     leakage-safe lifecycle and optional clustering segmentors
+src/orchestration/    targeting run contract that composes pacing and solving
+src/assignments/      deterministic, versioned assignment publisher
 src/marketplace/      capacity and geo-experiment design
 src/monitoring/       drift and rollout decisions
 src/data/             seeded marketplace data, PIT features, validation

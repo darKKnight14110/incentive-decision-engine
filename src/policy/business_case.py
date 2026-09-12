@@ -18,6 +18,8 @@ import yaml
 
 from src.policy.baselines import build_baseline_policy
 from src.policy.optimize import AllocationResult, optimize_allocation
+from src.orchestration.targeting import TargetingRunConfig, run_targeting
+from src.segmentation.segmentor import RuleBasedSegmentor
 
 
 @dataclass(frozen=True)
@@ -29,6 +31,7 @@ class BusinessCaseResult:
     sensitivity: pd.DataFrame
     canonical_claim: dict[str, float | str]
     optimizer_result: AllocationResult
+    pacing_snapshot: object | None = None
 
 
 def _load_assumptions(config_path: str = "configs/economics.yaml") -> dict[str, object]:
@@ -75,13 +78,9 @@ def make_business_case_candidates(
             "user_id": [f"u_{i:06d}" for i in range(n_users)],
             "engagement_score": engagement,
             "city_hour": [f"{c}_{h}" for c, h in zip(city, preferred_hour)],
-            "segment": np.select(
-                [engagement >= .55, engagement >= .25],
-                ["active", "lapsing"],
-                default="dormant",
-            ),
         }
     )
+    users = RuleBasedSegmentor().fit_transform(users)
 
     rows: list[dict[str, object]] = []
     # These are scenario assumptions, not estimates from Criteo.
@@ -117,7 +116,7 @@ def make_business_case_candidates(
                     # city-hour capacity is an active operational constraint.
                     "expected_incremental_orders": max(0.0, lift) * 20.0,
                     "city_hour": user.city_hour,
-                    "segment": user.segment,
+                    "segment": user.segment_id,
                     # Used by the propensity baseline as a predictive score.
                     "propensity_score": 0.02 + 0.20 * score,
                     "contact_allowed": True,
@@ -169,6 +168,7 @@ def run_business_case(
     rows: list[dict[str, float | str]] = []
     canonical_optimizer: AllocationResult | None = None
     canonical_random: pd.DataFrame | None = None
+    canonical_pacing = None
     for fraction in grid:
         budget = small_cost * fraction
         optimized = optimize_allocation(
@@ -204,6 +204,24 @@ def run_business_case(
         if fraction == .50:
             canonical_optimizer = optimized
             canonical_random = random_policy
+            # Exercise the same orchestration boundary used by a production
+            # targeting run. A one-cycle run preserves the canonical budget
+            # while still emitting an auditable pacing snapshot.
+            targeting = run_targeting(
+                candidates,
+                TargetingRunConfig(
+                    run_id=f"business-case-{seed}",
+                    cycle=1,
+                    total_cycles=1,
+                    configured_budget=budget,
+                    safety_buffer=0.0,
+                    maximum_contact_volume=int(n_users * .50),
+                    capacity=capacity,
+                    minimum_roi=0.0,
+                ),
+            )
+            canonical_optimizer = targeting.allocation
+            canonical_pacing = targeting.budget
 
     if canonical_optimizer is None or canonical_random is None:
         raise RuntimeError("canonical budget was not evaluated")
@@ -229,6 +247,8 @@ def run_business_case(
         "ci_high_inr_per_eligible_user": ci_high,
         "optimized_spend_inr": float(canonical_optimizer.expected_cost),
         "optimized_treatment_rate": float(canonical_optimizer.assignments.user_id.nunique() / n_users),
+        "solver_backend": "highs",
+        "pacer_recommended_budget_inr": float(canonical_pacing.recommended_budget) if canonical_pacing else float(small_cost * 0.50),
         "interpretation": (
             "Under the configured synthetic economics, the capacity-aware policy "
             "creates positive expected contribution margin versus random at the "
@@ -282,4 +302,5 @@ def run_business_case(
         pd.DataFrame(sensitivity_rows),
         claim,
         canonical_optimizer,
+        canonical_pacing,
     )

@@ -13,6 +13,9 @@ evidence into budget- and capacity-constrained promotion allocations.
 - Evaluates uplift on held-out randomized data with policy value, Qini/AUUC, and bootstrap intervals.
 - Converts response estimates into redemption-adjusted contribution margin.
 - Solves a multiple-choice knapsack with budget, contact, ROI, and city-hour constraints.
+- Uses an interview-defendable targeting architecture: leakage-safe segmentor,
+  finite-horizon budget pacer, pluggable solver seam, and versioned assignment
+  publisher.
 - Treats marketplace interference as a design problem requiring cluster randomization.
 - Includes point-in-time data contracts, persistent holdout, drift checks, rollout gates, and rollback rules.
 
@@ -31,7 +34,7 @@ impact. A geo-randomized pilot is the proposed validation step.
 
 ## Where to look
 
-- Code: `src/experimentation`, `src/causal`, `src/policy`, `src/marketplace`, `src/monitoring`
+- Code: `src/experimentation`, `src/causal`, `src/policy`, `src/segmentation`, `src/orchestration`, `src/assignments`, `src/marketplace`, `src/monitoring`
 - Data quality/PIT: `src/data`, `sql/`, `tests/`
 - Decision artifacts: `reports/`, [`docs/business_case.md`](../docs/business_case.md), and `docs/executive_case_study.pdf`
 - Interactive readout: `streamlit run app/dashboard.py`

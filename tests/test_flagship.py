@@ -13,6 +13,10 @@ from src.marketplace.geo_experiment import geo_experiment_design
 from src.monitoring.drift import population_stability_index
 from src.policy.optimize import optimize_allocation
 from src.policy.business_case import run_business_case
+from src.policy.pacer import BudgetPacer, BudgetPacerConfig
+from src.orchestration.targeting import TargetingRunConfig, run_targeting
+from src.assignments.publisher import publish_assignments
+from src.segmentation.segmentor import ClusterSegmentor, RuleBasedSegmentor
 
 
 def test_smoke_criteo_is_valid_and_partitioned_deterministically():
@@ -77,3 +81,44 @@ def test_business_case_is_reproducible_and_has_a_decision_shaped_claim():
     assert first.optimizer_result.expected_cost <= float(
         first.candidates.loc[first.candidates.action == "small_offer", "expected_cost"].sum() * .5
     ) + 1e-8
+
+
+def test_segmentors_are_versioned_and_leakage_safe():
+    frame = pd.DataFrame({"engagement_score": [.10, .40, .80]})
+    segmented = RuleBasedSegmentor().fit_transform(frame)
+    assert segmented.segment_id.tolist() == ["dormant", "lapsing", "active"]
+    assert segmented.segment_version.nunique() == 1
+    with pytest.raises(ValueError, match="post-treatment"):
+        ClusterSegmentor(n_clusters=2).fit(
+            pd.DataFrame({"conversion": [0, 1], "x": [0.0, 1.0]}), ["conversion", "x"]
+        )
+    with pytest.raises(ValueError, match="post-treatment"):
+        ClusterSegmentor(n_clusters=2).fit(
+            pd.DataFrame({"treatment": [0, 1], "x": [0.0, 1.0]}), ["treatment", "x"]
+        )
+
+
+def test_budget_pacer_reconciles_liability_and_pauses_when_exhausted():
+    pacer = BudgetPacer(BudgetPacerConfig(total_budget=100, total_cycles=4, safety_buffer=.10))
+    snapshot = pacer.reconcile(cycle=1, realized_spend=20, predicted_liability=10)
+    assert snapshot.remaining_budget == pytest.approx(70)
+    assert snapshot.recommended_budget == pytest.approx(15.75)
+    assert pacer.reconcile(cycle=4, realized_spend=100).status == "pause"
+
+
+def test_targeting_and_assignment_contract_are_deterministic():
+    candidates = pd.DataFrame({
+        "user_id": ["u1", "u1", "u2", "u2"],
+        "action": ["no_offer", "small_offer", "no_offer", "small_offer"],
+        "expected_value": [0.0, 20.0, 0.0, 10.0],
+        "expected_cost": [0.0, 15.0, 0.0, 15.0],
+    })
+    result = run_targeting(candidates, TargetingRunConfig(
+        run_id="test-run", cycle=1, total_cycles=1, configured_budget=15,
+        safety_buffer=0.0, maximum_contact_volume=1,
+    ))
+    assert result.budget.recommended_budget == pytest.approx(15)
+    assert result.allocation.expected_cost <= 15
+    published = publish_assignments(result.allocation.assignments, "reports/test_assignments.csv", "test-run", "m1", "p1")
+    assert published.assignment_id.is_unique
+    assert published.run_id.eq("test-run").all()

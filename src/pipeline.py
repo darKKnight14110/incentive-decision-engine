@@ -21,6 +21,7 @@ from src.policy.optimize import optimize_allocation
 from src.policy.baselines import build_baseline_policy
 from src.policy.business_case import run_business_case
 from src.marketplace.geo_experiment import geo_experiment_design
+from src.assignments.publisher import publish_assignments
 
 def _sha256(path: Path) -> str:
     digest=hashlib.sha256()
@@ -80,6 +81,14 @@ def run(mode: str = "smoke", output_dir: str | Path = "reports", criteo_path: st
     business_case.sensitivity.to_csv(output/"business_case_sensitivity.csv",index=False)
     canonical_claim=business_case.canonical_claim
     (output/"business_case_claim.json").write_text(json.dumps(canonical_claim,indent=2),encoding="utf-8")
+    assignment_path = output / "assignments.csv"
+    published_assignments = publish_assignments(
+        business_case.optimizer_result.assignments,
+        assignment_path,
+        run_id=f"{mode}-{seed}-canonical",
+        model_version="synthetic-uplift-v1",
+        policy_version="mckp-highs-v1",
+    )
     optimized_rows=case_rows[case_rows.policy=="optimized"].copy()
     budgets_frame=optimized_rows.rename(columns={"expected_value_inr":"expected_value","expected_cost_inr":"expected_cost","marginal_budget_value_inr":"shadow_price_proxy"})
     budgets_frame["utilization"]=budgets_frame.expected_cost/budgets_frame.budget_inr.replace(0,np.nan)
@@ -120,7 +129,7 @@ def run(mode: str = "smoke", output_dir: str | Path = "reports", criteo_path: st
     _write_pdf(output/"experiment_readout.pdf","Experiment readout",paragraphs,[("Estimated Qini",plt.imread(qini_path)),("Business-case sensitivity",plt.imread(sensitivity_path))])
     _write_pdf(Path("docs")/"executive_case_study.pdf","Increment executive case study",["Decision: allocate a fixed promotion budget to maximize incremental contribution margin per eligible customer.",f"The smoke run estimates a conversion ITT of {estimate.point:.4f}; uncertainty is [{estimate.ci_low:.4f}, {estimate.ci_high:.4f}].",f"Business claim (synthetic illustration): at 50% of treat-all-small spend, capacity-aware allocation produces {canonical_claim['optimized_expected_value_inr']:.0f} INR expected net value and {canonical_claim['incremental_value_vs_random_inr_per_eligible_user']:.2f} INR per eligible user above random (95% bootstrap interval {canonical_claim['ci_low_inr_per_eligible_user']:.2f} to {canonical_claim['ci_high_inr_per_eligible_user']:.2f}).","Sensitivity: the advantage remains positive across the checked margin and capacity grid; see reports/business_case_sensitivity.csv for the exact scenarios.","Recommendation: validate economics and causal response in a geo-randomized pilot before treating the scenario as realized impact."],[("Estimated Qini",plt.imread(qini_path)),("Synthetic matched-budget policy value",plt.imread(profit_path)),("Synthetic sensitivity grid",plt.imread(sensitivity_path))])
     deck_path=output/"interview_deck.pptx"; _write_deck(deck_path,f"Synthetic business case: {canonical_claim['incremental_value_vs_random_inr_per_eligible_user']:.2f} INR per eligible user above random at 50% budget",[("Qini",qini_path),("Uplift deciles",decile_path),("Profit vs budget",profit_path)])
-    manifest={"mode":mode,"seed":seed,"rows":len(frame),"estimate":estimate.__dict__,"policy_value_estimate":policy_point,"business_case_claim":canonical_claim,"business_case_sensitivity_rows":len(business_case.sensitivity),"platform":platform.python_version(),"inputs":{}}
+    manifest={"mode":mode,"seed":seed,"rows":len(frame),"estimate":estimate.__dict__,"policy_value_estimate":policy_point,"business_case_claim":canonical_claim,"business_case_sensitivity_rows":len(business_case.sensitivity),"assignment_artifact":{"path":str(assignment_path),"rows":len(published_assignments)},"platform":platform.python_version(),"inputs":{}}
     if mode=="full": manifest["inputs"]["criteo"]={"path":str(source),"sha256":_sha256(source)}
     (output/"run_manifest.json").write_text(json.dumps(manifest,indent=2,default=str),encoding="utf-8")
     return manifest
