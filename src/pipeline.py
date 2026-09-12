@@ -1,6 +1,7 @@
 """Run the offline smoke pipeline or the full-data portfolio reproduction."""
 from __future__ import annotations
-import argparse, hashlib, json, platform
+import argparse, hashlib, json, platform, subprocess, time, tracemalloc
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -9,12 +10,14 @@ from matplotlib.backends.backend_pdf import PdfPages
 from pptx import Presentation
 from pptx.util import Inches
 
-from src.experimentation.criteo import smoke_criteo, load_criteo
-from src.experimentation.estimation import estimate_itt, bootstrap_difference
+from src.experimentation.criteo import smoke_criteo, load_criteo, write_criteo_partitions, iter_partition, iter_criteo
+from src.experimentation.estimation import estimate_itt, estimate_itt_stream, bootstrap_difference
 from src.experimentation.diagnostics import aa_pvalues
 from src.causal.meta_learners import ConstantEffectLearner, TLearner
+from src.causal.model_selection import select_uplift_model
 from src.causal.evaluation import policy_value, qini_curve, uplift_deciles
 from src.causal.simulate import generate_causal_data
+from src.experimentation.streaming import policy_value_stream
 from src.data.generate_marketplace import generate_marketplace
 from src.data.build_features import build_feature_frame
 from src.policy.optimize import optimize_allocation
@@ -22,6 +25,32 @@ from src.policy.baselines import build_baseline_policy
 from src.policy.business_case import run_business_case
 from src.marketplace.geo_experiment import geo_experiment_design
 from src.assignments.publisher import publish_assignments
+
+
+def _config_hash() -> str:
+    digest = hashlib.sha256()
+    for path in sorted(Path("configs").glob("*.yaml")):
+        digest.update(path.name.encode("utf-8")); digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def _git_revision() -> str | None:
+    repository = Path.cwd().resolve()
+    try:
+        return subprocess.check_output(["git", "-c", f"safe.directory={repository.as_posix()}", "rev-parse", "HEAD"], cwd=repository, text=True, stderr=subprocess.DEVNULL).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def _dependency_versions() -> dict[str, str]:
+    names = ("numpy", "pandas", "scipy", "scikit-learn", "lightgbm", "ortools", "duckdb")
+    result = {}
+    for name in names:
+        try:
+            result[name] = version(name)
+        except PackageNotFoundError:
+            result[name] = "unavailable"
+    return result
 
 def _sha256(path: Path) -> str:
     digest=hashlib.sha256()
@@ -48,27 +77,47 @@ def _write_deck(path: Path, headline: str, figures: list[tuple[str, Path]]):
     presentation.save(path)
 
 def run(mode: str = "smoke", output_dir: str | Path = "reports", criteo_path: str | Path | None = None, seed: int = 2025) -> dict[str, object]:
+    started = time.perf_counter(); tracemalloc.start()
     output=Path(output_dir); figures=output/"figures"; figures.mkdir(parents=True, exist_ok=True)
     if mode == "full":
         source=Path(criteo_path) if criteo_path else next(iter(Path("data/raw/criteo").glob("*.csv.gz")), None)
         if source is None: raise FileNotFoundError("download Criteo first with `make download-criteo`")
-        dataset=load_criteo(source, seed=seed)
+        partition_root = Path("data/interim") / f"criteo_partitions_{seed}"
+        partition_manifest = write_criteo_partitions(source, partition_root, seed=seed)
+        estimate=estimate_itt_stream(iter_criteo(source), "conversion", expected_probability=float(.85), fail_on_srm=True)
+        # Keep model fitting bounded while policy evaluation and ITT use every
+        # validated row from the partitioned archive.
+        dataset=load_criteo(source, seed=seed, max_rows=250_000)
         frame=dataset.frame
         model_cap=250_000
     else:
-        frame=smoke_criteo(seed=seed); dataset=None; model_cap=len(frame)
-    estimate=estimate_itt(frame,"conversion",expected_probability=float(frame.treatment.mean()),fail_on_srm=False)
+        frame=smoke_criteo(seed=seed); dataset=None; model_cap=len(frame); partition_manifest=None
+        estimate=estimate_itt(frame,"conversion",expected_probability=float(frame.treatment.mean()),fail_on_srm=False)
     boot=bootstrap_difference(frame,"conversion",repetitions=100 if mode=="smoke" else 500,seed=seed)
     x=frame[[f"f{i}" for i in range(12)]].to_numpy(); y=frame.conversion.to_numpy(); t=frame.treatment.to_numpy()
     if dataset is not None:
-        train=dataset.train_index[:model_cap]; test=dataset.test_index
+        train=dataset.train_index[:model_cap]; validation=dataset.validation_index; test=dataset.test_index
     else:
-        rng=np.random.default_rng(seed); order=rng.permutation(len(frame)); train=order[:int(.6*len(frame))]; test=order[int(.8*len(frame)):]
-    learner=TLearner(seed).fit(x[train],t[train],y[train]); score=learner.predict(x[test])
+        rng=np.random.default_rng(seed); order=rng.permutation(len(frame)); train=order[:int(.6*len(frame))]; validation=order[int(.6*len(frame)):int(.8*len(frame))]; test=order[int(.8*len(frame)):]
+    learner=TLearner(seed).fit(x[train],t[train],y[train])
+    constant_learner=ConstantEffectLearner().fit(x[train],t[train],y[train])
+    validation_score=learner.predict(x[validation])
+    constant_validation_score=constant_learner.predict(x[validation])
+    selection=select_uplift_model(
+        y[validation], t[validation], {"t-learner": validation_score},
+        constant_validation_score, assignment_probability=float(t[train].mean()), target_rate=.20,
+    )
+    active_learner=constant_learner if selection.selected_model == "constant-effect" else learner
+    score=active_learner.predict(x[test])
+    threshold=float(selection.threshold)
     test_y,test_t=y[test],t[test]
-    ranking=np.argsort(-score); target=np.zeros(len(test),dtype=int); target[ranking[:max(1,len(test)//5)]]=1
+    target=(score >= threshold).astype(int)
     uplift=uplift_deciles(test_y,test_t,score)
-    policy_point=policy_value(test_y,test_t,target,assignment_probability=float(t.mean()))
+    if mode == "full":
+        policy_stream = policy_value_stream(iter_partition(partition_root, "test"), active_learner, [f"f{i}" for i in range(12)], threshold, assignment_probability=float(estimate.treated_n / max(estimate.treated_n + estimate.control_n, 1)))
+        policy_point=policy_stream["point"]
+    else:
+        policy_point=policy_value(test_y,test_t,target,assignment_probability=float(t.mean()))
     qx,qy=qini_curve(test_y,test_t,score)
     # Keep the checked-in fixture compact enough for offline CI. The module
     # supports larger scenarios when run outside the smoke pipeline.
@@ -129,8 +178,10 @@ def run(mode: str = "smoke", output_dir: str | Path = "reports", criteo_path: st
     _write_pdf(output/"experiment_readout.pdf","Experiment readout",paragraphs,[("Estimated Qini",plt.imread(qini_path)),("Business-case sensitivity",plt.imread(sensitivity_path))])
     _write_pdf(Path("docs")/"executive_case_study.pdf","Increment executive case study",["Decision: allocate a fixed promotion budget to maximize incremental contribution margin per eligible customer.",f"The smoke run estimates a conversion ITT of {estimate.point:.4f}; uncertainty is [{estimate.ci_low:.4f}, {estimate.ci_high:.4f}].",f"Business claim (synthetic illustration): at 50% of treat-all-small spend, capacity-aware allocation produces {canonical_claim['optimized_expected_value_inr']:.0f} INR expected net value and {canonical_claim['incremental_value_vs_random_inr_per_eligible_user']:.2f} INR per eligible user above random (95% bootstrap interval {canonical_claim['ci_low_inr_per_eligible_user']:.2f} to {canonical_claim['ci_high_inr_per_eligible_user']:.2f}).","Sensitivity: the advantage remains positive across the checked margin and capacity grid; see reports/business_case_sensitivity.csv for the exact scenarios.","Recommendation: validate economics and causal response in a geo-randomized pilot before treating the scenario as realized impact."],[("Estimated Qini",plt.imread(qini_path)),("Synthetic matched-budget policy value",plt.imread(profit_path)),("Synthetic sensitivity grid",plt.imread(sensitivity_path))])
     deck_path=output/"interview_deck.pptx"; _write_deck(deck_path,f"Synthetic business case: {canonical_claim['incremental_value_vs_random_inr_per_eligible_user']:.2f} INR per eligible user above random at 50% budget",[("Qini",qini_path),("Uplift deciles",decile_path),("Profit vs budget",profit_path)])
-    manifest={"mode":mode,"seed":seed,"rows":len(frame),"estimate":estimate.__dict__,"policy_value_estimate":policy_point,"business_case_claim":canonical_claim,"business_case_sensitivity_rows":len(business_case.sensitivity),"assignment_artifact":{"path":str(assignment_path),"rows":len(published_assignments)},"platform":platform.python_version(),"inputs":{}}
+    _, peak_memory = tracemalloc.get_traced_memory(); tracemalloc.stop()
+    manifest={"mode":mode,"seed":seed,"seeds":{"pipeline":seed,"business_case":seed,"bootstrap":seed+1},"rows":len(frame),"estimate":estimate.__dict__,"policy_value_estimate":policy_point,"policy_threshold":threshold,"model_selection":selection.__dict__,"business_case_claim":canonical_claim,"business_case_sensitivity_rows":len(business_case.sensitivity),"assignment_artifact":{"path":str(assignment_path),"rows":len(published_assignments)},"platform":platform.python_version(),"inputs":{},"model_rows":len(frame),"config_hash":_config_hash(),"dependencies":_dependency_versions(),"git_revision":_git_revision(),"runtime_seconds":time.perf_counter()-started,"peak_memory_bytes":peak_memory}
     if mode=="full": manifest["inputs"]["criteo"]={"path":str(source),"sha256":_sha256(source)}
+    if mode=="full": manifest["criteo_partitions"]=partition_manifest
     (output/"run_manifest.json").write_text(json.dumps(manifest,indent=2,default=str),encoding="utf-8")
     return manifest
 

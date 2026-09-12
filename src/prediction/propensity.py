@@ -5,11 +5,13 @@ an incumbent targeting strawman and are never reported as causal evidence.
 """
 from __future__ import annotations
 from dataclasses import dataclass
+from pathlib import Path
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import HistGradientBoostingClassifier
+from lightgbm import LGBMClassifier
 from sklearn.metrics import average_precision_score, brier_score_loss, log_loss, roc_auc_score
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -23,10 +25,34 @@ class PropensityModel:
     def predict_proba(self, x: pd.DataFrame | np.ndarray) -> np.ndarray:
         return np.asarray(self.estimator.predict_proba(x))[:, 1]
 
+    def save(self, path: str | Path) -> Path:
+        """Persist the fitted estimator and validation metadata."""
+
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump({"name": self.name, "estimator": self.estimator, "metrics": self.metrics}, target)
+        return target
+
+    @classmethod
+    def load(cls, path: str | Path) -> "PropensityModel":
+        payload = joblib.load(path)
+        return cls(str(payload["name"]), payload["estimator"], dict(payload["metrics"]))
+
 def fit_propensity_models(x_train, y_train, x_validation, y_validation, seed: int = 2025) -> dict[str, PropensityModel]:
     models = {
         "logistic": make_pipeline(StandardScaler(), CalibratedClassifierCV(LogisticRegression(max_iter=300, class_weight="balanced", random_state=seed), cv=3, method="sigmoid")),
-        "gradient_boosting": CalibratedClassifierCV(HistGradientBoostingClassifier(max_iter=150, learning_rate=0.05, max_leaf_nodes=31, random_state=seed), cv=3, method="sigmoid"),
+        "lightgbm": CalibratedClassifierCV(LGBMClassifier(
+            n_estimators=250,
+            learning_rate=0.05,
+            num_leaves=31,
+            min_child_samples=50,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            reg_lambda=1.0,
+            random_state=seed,
+            n_jobs=1,
+            verbosity=-1,
+        ), cv=3, method="sigmoid"),
     }
     result = {}
     for name, model in models.items():
@@ -37,4 +63,17 @@ def fit_propensity_models(x_train, y_train, x_validation, y_validation, seed: in
 
 def propensity_metrics(y_true, prediction) -> dict[str, float]:
     y_true, prediction = np.asarray(y_true), np.asarray(prediction)
-    return {"roc_auc": float(roc_auc_score(y_true, prediction)), "pr_auc": float(average_precision_score(y_true, prediction)), "log_loss": float(log_loss(y_true, prediction)), "brier": float(brier_score_loss(y_true, prediction))}
+    prediction = np.clip(prediction.astype(float), 1e-7, 1 - 1e-7)
+    bins = np.linspace(0.0, 1.0, 11)
+    ece = 0.0
+    for low, high in zip(bins[:-1], bins[1:]):
+        mask = (prediction >= low) & (prediction < high if high < 1 else prediction <= high)
+        if mask.any():
+            ece += float(mask.mean()) * abs(float(prediction[mask].mean()) - float(y_true[mask].mean()))
+    return {
+        "roc_auc": float(roc_auc_score(y_true, prediction)),
+        "pr_auc": float(average_precision_score(y_true, prediction)),
+        "log_loss": float(log_loss(y_true, prediction)),
+        "brier": float(brier_score_loss(y_true, prediction)),
+        "calibration_error": float(ece),
+    }

@@ -16,10 +16,12 @@ eligible customer under a fixed budget and operational constraints.
 
 The checked-in offline run has two deliberately separate results:
 
-1. **Measured experiment result.** On 12,000 deterministic Criteo-shaped
-   randomized rows, the conversion ITT is **+0.29 percentage points** with a
-   95% interval of **−0.33 to +0.91 points**. The interval crosses zero, so the
-   project does not claim positive advertising impact from this smoke fixture.
+1. **Smoke inference check.** On 12,000 deterministic, simulated
+   Criteo-shaped randomized rows, the conversion ITT is **+0.29 percentage
+   points** with a 95% interval of **−0.33 to +0.91 points**. The interval
+   crosses zero, so the project does not claim positive advertising impact from
+   this smoke fixture. The complete Criteo result is produced only by
+   `make reproduce-full` after the explicit download.
 2. **Business decision illustration.** On 250 deterministic synthetic
    marketplace users with explicit INR economics and city-hour capacity, the
    capacity-aware optimizer produces **₹2,038 expected net contribution at the
@@ -53,7 +55,8 @@ first inputs to replace with validated unit economics in a production pilot.
 ### Causal modeling
 
 - Calibrated logistic and LightGBM propensity baselines.
-- Constant-effect, T-, X-, and cross-fitted doubly robust learners.
+- Constant-effect, T-, X-, and cross-fitted doubly robust learners, with
+  fold-level predictions and persisted model metadata.
 - Known-ground-truth simulations for constant, heterogeneous, confounded, and
   poor-overlap data-generating processes.
 - Qini/AUUC, uplift deciles, fixed-policy bootstrap intervals, and held-out
@@ -94,6 +97,8 @@ first inputs to replace with validated unit economics in a production pilot.
 - [Canonical assignment queue](reports/assignments.csv)
 - [Matched-budget policy table](reports/business_case.csv)
 - [Business-case sensitivity](reports/business_case_sensitivity.csv)
+- [Optimizer parity benchmark](reports/optimizer_benchmark.json)
+- [Architecture note](docs/architecture.md)
 - [Technical appendix](docs/technical_appendix.md)
 - [Model card](docs/model_card.md)
 - [Rollout plan](docs/rollout_plan.md)
@@ -114,6 +119,8 @@ Run the deterministic offline build and tests:
 ```powershell
 python -m src.pipeline --mode smoke --output-dir reports
 python -m pytest -q
+python -m src.reporting.claim_audit
+python -m src.reporting.benchmark
 ```
 
 On systems with GNU Make, the equivalent gates are:
@@ -121,6 +128,7 @@ On systems with GNU Make, the equivalent gates are:
 ```text
 make build
 make test
+make audit-claims
 ```
 
 To reproduce the public randomized experiment, download the raw Criteo file

@@ -14,6 +14,8 @@ class AllocationResult:
     utilization: float
     marginal_budget_value: float | None
     violations: tuple[str, ...]
+    rounding_error: float = 0.0
+    binding_constraints: tuple[str, ...] = ()
 
 def optimize_allocation(candidates: pd.DataFrame, budget: float, maximum_contact_volume: int | None = None, capacity: dict[str, float] | None = None, minimum_roi: float | None = None, segment_limits: dict[str, int] | None = None, return_shadow: bool = True) -> AllocationResult:
     required={"user_id","action","expected_value","expected_cost"}; missing=required-set(candidates.columns)
@@ -50,4 +52,18 @@ def optimize_allocation(candidates: pd.DataFrame, budget: float, maximum_contact
     if return_shadow and budget >= 0:
         nearby=optimize_allocation(frame, budget=max(0.0, budget-1.0), maximum_contact_volume=maximum_contact_volume, capacity=capacity, minimum_roi=minimum_roi, segment_limits=segment_limits, return_shadow=False)
         shadow=value-nearby.expected_value
-    return AllocationResult(selected, value, cost, cost/budget if budget else 0.0, shadow, tuple(violations))
+    binding=[]
+    if budget > 0 and abs(cost-budget) <= 1e-6:
+        binding.append("budget")
+    if maximum_contact_volume is not None and int((selected.action != "no_offer").sum()) >= maximum_contact_volume:
+        binding.append("contact_volume")
+    if segment_limits is not None and "segment" in frame:
+        for segment, limit in segment_limits.items():
+            if int((selected.segment == segment).sum()) >= limit:
+                binding.append(f"segment:{segment}")
+    if capacity is not None and "city_hour" in frame:
+        for key, limit in capacity.items():
+            usage = float(selected.loc[selected.city_hour == key, "expected_incremental_orders"].sum()) if "expected_incremental_orders" in selected else 0.0
+            if usage >= float(limit) - 1e-6:
+                binding.append(f"capacity:{key}")
+    return AllocationResult(selected, value, cost, cost/budget if budget else 0.0, shadow, tuple(violations), 0.0, tuple(binding))

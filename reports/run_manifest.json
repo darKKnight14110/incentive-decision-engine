@@ -1,6 +1,11 @@
 {
   "mode": "smoke",
   "seed": 2025,
+  "seeds": {
+    "pipeline": 2025,
+    "business_case": 2025,
+    "bootstrap": 2026
+  },
   "rows": 12000,
   "estimate": {
     "point": 0.002906982387487359,
@@ -12,7 +17,21 @@
     "srm_p": 1.0,
     "outcome": "conversion"
   },
-  "policy_value_estimate": -0.003032195956971396,
+  "policy_value_estimate": -0.0025409403075314276,
+  "policy_threshold": 0.04828723093272705,
+  "model_selection": {
+    "selected_model": "t-learner",
+    "validation_metrics": {
+      "policy_value:constant-effect": -0.004576339698182945,
+      "policy_value:t-learner": 0.000678510933169078
+    },
+    "stability": {
+      "candidate_count": 2.0,
+      "validation_improvement_vs_constant": 0.005254850631352023
+    },
+    "threshold": 0.04828723093272705,
+    "rejection_reason": null
+  },
   "business_case_claim": {
     "claim_type": "simulated_business_case",
     "canonical_budget_fraction": "0.5",
@@ -35,5 +54,19 @@
     "rows": 125
   },
   "platform": "3.12.6",
-  "inputs": {}
+  "inputs": {},
+  "model_rows": 12000,
+  "config_hash": "1ad7506e52351dc76f9eeda9c44c7f94a69f4c825233fdd15b1b29b224255b15",
+  "dependencies": {
+    "numpy": "2.2.6",
+    "pandas": "2.2.2",
+    "scipy": "1.14.1",
+    "scikit-learn": "1.5.2",
+    "lightgbm": "4.7.0",
+    "ortools": "9.15.6755",
+    "duckdb": "1.5.5"
+  },
+  "git_revision": "833aacb0d84b9de6c936b44bb706f459a1789703",
+  "runtime_seconds": 31.002689000000828,
+  "peak_memory_bytes": 94728580
 }

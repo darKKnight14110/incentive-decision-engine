@@ -1,4 +1,4 @@
-.PHONY: build test download-criteo reproduce-full test-full
+.PHONY: build test download-criteo reproduce-full test-full audit-claims benchmark
 
 build:
 	python -m src.reporting.metric_tree
@@ -18,3 +18,9 @@ reproduce-full:
 
 test-full:
 	python -m pytest -q -m "slow or full"
+
+audit-claims:
+	python -m src.reporting.claim_audit
+
+benchmark:
+	python -m src.reporting.benchmark

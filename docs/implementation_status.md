@@ -13,4 +13,6 @@ case is now decision-shaped: at the canonical 50% budget, the capacity-aware
 optimizer yields ₹2,038 expected net contribution versus ₹723 for random on
 250 synthetic users, a ₹5.26 per-user advantage (95% bootstrap interval ₹4.18
 to ₹6.47). This is an estimated illustration under `configs/economics.yaml`,
-not realized impact.
+not realized impact. The checked-in Criteo result is a simulated RCT-shaped
+smoke fixture; a full-data claim is emitted only after `make reproduce-full`
+records the archive manifest and partitioned run.

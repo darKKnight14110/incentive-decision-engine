@@ -1,0 +1,29 @@
+{
+  "users": 80,
+  "backends": {
+    "highs": {
+      "expected_value": 717.0,
+      "expected_cost": 320.0,
+      "assignments": 40,
+      "runtime_seconds": 0.0990007000073092,
+      "peak_memory_bytes": 338245,
+      "rounding_error": 0.0
+    },
+    "cp-sat": {
+      "expected_value": 717.0,
+      "expected_cost": 320.0,
+      "assignments": 40,
+      "runtime_seconds": 0.44989730000088457,
+      "peak_memory_bytes": 1122841,
+      "rounding_error": 0.0
+    }
+  },
+  "heuristics": {
+    "greedy_expected_value": 573.0,
+    "lagrangian_expected_value": 679.0,
+    "greedy_gap_vs_highs": 144.0,
+    "lagrangian_gap_vs_highs": 38.0
+  },
+  "objective_difference": 0.0,
+  "parity_passed": true
+}

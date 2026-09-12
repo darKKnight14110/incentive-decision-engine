@@ -4,14 +4,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.experimentation.criteo import partition_criteo, smoke_criteo, validate_criteo_frame
+from src.experimentation.criteo import partition_criteo, scan_criteo, smoke_criteo, validate_criteo_frame, write_criteo_partitions, iter_partition
 from src.experimentation.diagnostics import aa_pvalues, sample_ratio_mismatch
-from src.experimentation.estimation import estimate_itt
+from src.experimentation.estimation import estimate_itt, estimate_itt_stream
 from src.causal.estimators import difference_in_means, doubly_robust
 from src.causal.simulate import generate_causal_data
+from src.causal.model_selection import select_uplift_model
+from src.causal.recovery import benchmark_estimators, summarize_recovery
 from src.marketplace.geo_experiment import geo_experiment_design
 from src.monitoring.drift import population_stability_index
 from src.policy.optimize import optimize_allocation
+from src.policy.solver import CpSatSolver, HiGHSSolver
+from src.prediction.propensity import fit_propensity_models
 from src.policy.business_case import run_business_case
 from src.policy.pacer import BudgetPacer, BudgetPacerConfig
 from src.orchestration.targeting import TargetingRunConfig, run_targeting
@@ -25,6 +29,21 @@ def test_smoke_criteo_is_valid_and_partitioned_deterministically():
     assert len(data) == 500
     assert np.array_equal(a.test_index, b.test_index)
     assert set(a.train_index) | set(a.validation_index) | set(a.test_index) == set(range(500))
+
+
+def test_stream_itt_and_partition_manifest_match_in_memory(tmp_path):
+    frame = smoke_criteo(500, 7)
+    path = tmp_path / "smoke.csv.gz"
+    frame.to_csv(path, index=False, compression="gzip")
+    scanned = scan_criteo(path, chunksize=113)
+    assert scanned.row_count == len(frame)
+    assert scanned.schema["f0"] == "float32"
+    assert estimate_itt_stream(iter([frame.iloc[:200], frame.iloc[200:]]), "conversion", fail_on_srm=False).point == pytest.approx(
+        estimate_itt(frame, "conversion", fail_on_srm=False).point
+    )
+    manifest = write_criteo_partitions(path, tmp_path / "parts", seed=7, chunksize=113)
+    assert sum(manifest["counts"].values()) == len(frame)
+    assert len(pd.concat(list(iter_partition(tmp_path / "parts", "test")))) == manifest["counts"]["test"]
 
 
 def test_criteo_rejects_schema_and_post_treatment_column():
@@ -122,3 +141,37 @@ def test_targeting_and_assignment_contract_are_deterministic():
     published = publish_assignments(result.allocation.assignments, "reports/test_assignments.csv", "test-run", "m1", "p1")
     assert published.assignment_id.is_unique
     assert published.run_id.eq("test-run").all()
+
+
+def test_higher_fidelity_models_and_solver_backends_have_contract_parity(tmp_path):
+    rng = np.random.default_rng(12)
+    x = rng.normal(size=(240, 4))
+    y = rng.binomial(1, 1 / (1 + np.exp(-x[:, 0])))
+    fitted = fit_propensity_models(x[:160], y[:160], x[160:], y[160:], seed=12)
+    assert set(fitted) == {"logistic", "lightgbm"}
+    assert all("calibration_error" in model.metrics for model in fitted.values())
+    path = fitted["lightgbm"].save(tmp_path / "propensity.joblib")
+    assert np.allclose(fitted["lightgbm"].predict_proba(x[160:]), fitted["lightgbm"].load(path).predict_proba(x[160:]))
+    candidates = pd.DataFrame({
+        "user_id": ["u1", "u1", "u2", "u2"],
+        "action": ["no_offer", "small_offer", "no_offer", "small_offer"],
+        "expected_value": [0.0, 30.0, 0.0, 20.0],
+        "expected_cost": [0.0, 50.0, 0.0, 50.0],
+    })
+    highs = HiGHSSolver().solve(candidates, 50, return_shadow=False)
+    cpsat = CpSatSolver().solve(candidates, 50, return_shadow=False)
+    assert cpsat.expected_value == pytest.approx(highs.expected_value)
+    assert cpsat.expected_cost <= 50
+
+
+def test_model_selection_is_validation_only_and_recovery_has_typed_summary():
+    rng = np.random.default_rng(7)
+    t = rng.binomial(1, .5, 160)
+    y = rng.binomial(1, .20 + .10 * t)
+    constant = np.full(len(y), .10)
+    result = select_uplift_model(y, t, {"candidate": constant + rng.normal(0, .01, len(y))}, constant, .5)
+    assert result.selected_model in {"constant-effect", "candidate"}
+    recovery = benchmark_estimators(effect="constant", repetitions=3, n=80, seed=2)
+    summaries = summarize_recovery(recovery)
+    assert len(summaries) == 4
+    assert all(np.isfinite(summary.rmse) for summary in summaries)

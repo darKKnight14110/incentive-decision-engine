@@ -9,6 +9,7 @@ dependencies = [
     "PyYAML>=6,<7",
     "duckdb",
     "scikit-learn>=1.4,<2",
+    "lightgbm>=4.3,<5",
     "scipy>=1.11,<2",
     "statsmodels>=0.14,<1",
     "streamlit>=1.35,<2",
@@ -18,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<9"]
+solvers = ["ortools>=9.10,<10"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -7,9 +7,9 @@ work with an in-memory smoke frame, which keeps CI and ``make build`` offline.
 from __future__ import annotations
 
 import argparse
-import gzip
 import hashlib
 import json
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
@@ -21,6 +21,35 @@ import pandas as pd
 FEATURE_COLUMNS = [f"f{i}" for i in range(12)]
 REQUIRED_COLUMNS = FEATURE_COLUMNS + ["treatment", "exposure", "visit", "conversion"]
 DEFAULT_URL = "http://go.criteo.net/criteo-research-uplift-v2.1.csv.gz"
+CITATION = "Diemert et al. (2018), Criteo Uplift Prediction Dataset"
+LICENSE_STATUS = "The source repository does not publish a license; consult the Criteo dataset webpage before redistribution."
+
+
+@dataclass(frozen=True)
+class DatasetManifest:
+    """Portable provenance contract for a validated Criteo archive."""
+
+    source: str
+    resolved_url: str
+    sha256: str
+    schema: dict[str, str]
+    row_count: int
+    citation: str
+    license_status: str
+    retrieved_at_utc: str | None = None
+    compressed_size_bytes: int | None = None
+
+
+@dataclass(frozen=True)
+class SplitManifest:
+    """Deterministic split metadata independent of machine-local paths."""
+
+    seed: int
+    strata: list[str]
+    train_rows: int
+    validation_rows: int
+    test_rows: int
+    input_hash: str
 
 
 @dataclass(frozen=True)
@@ -89,7 +118,47 @@ def _stratified_indexes(frame: pd.DataFrame, seed: int) -> tuple[np.ndarray, np.
 def partition_criteo(frame: pd.DataFrame, seed: int = 2025) -> CriteoDataset:
     clean = validate_criteo_frame(frame).reset_index(drop=True)
     train, validation, test = _stratified_indexes(clean, seed)
-    return CriteoDataset(clean, train, validation, test, {"seed": seed, "rows": len(clean)})
+    split_manifest = SplitManifest(
+        seed=seed,
+        strata=sorted((clean.treatment.astype(str) + clean.conversion.astype(str)).unique().tolist()),
+        train_rows=len(train),
+        validation_rows=len(validation),
+        test_rows=len(test),
+        input_hash=_frame_hash(clean),
+    )
+    return CriteoDataset(clean, train, validation, test, {"seed": seed, "rows": len(clean), "split": split_manifest.__dict__})
+
+
+def _frame_hash(frame: pd.DataFrame) -> str:
+    digest = hashlib.sha256()
+    digest.update(",".join(frame.columns).encode("utf-8"))
+    digest.update(pd.util.hash_pandas_object(frame, index=True).to_numpy(dtype="uint64").tobytes())
+    return digest.hexdigest()
+
+
+def _schema() -> dict[str, str]:
+    return {column: ("float32" if column in FEATURE_COLUMNS else "int8") for column in REQUIRED_COLUMNS}
+
+
+def scan_criteo(path: str | Path, chunksize: int = 250_000) -> DatasetManifest:
+    """Validate an archive in bounded chunks and return complete provenance."""
+
+    source = Path(path)
+    if not source.exists():
+        raise FileNotFoundError(source)
+    rows = 0
+    for chunk in iter_criteo(source, chunksize=chunksize):
+        rows += len(chunk)
+    return DatasetManifest(
+        source="https://github.com/criteo-research/large-scale-ITE-UM-benchmark",
+        resolved_url="",
+        sha256=_sha256_file(source),
+        schema=_schema(),
+        row_count=rows,
+        citation=CITATION,
+        license_status=LICENSE_STATUS,
+        compressed_size_bytes=source.stat().st_size,
+    )
 
 
 def iter_criteo(path: str | Path, chunksize: int = 250_000) -> Iterator[pd.DataFrame]:
@@ -100,19 +169,114 @@ def iter_criteo(path: str | Path, chunksize: int = 250_000) -> Iterator[pd.DataF
         yield validate_criteo_frame(chunk)
 
 
+def _sha256_file(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def download_criteo(download_dir: str | Path, url: str = DEFAULT_URL, timeout: int = 120) -> Path:
-    """Download the public gzip file and write a provenance manifest."""
+    """Download the public gzip file atomically and write a provenance manifest."""
     target = Path(download_dir)
     target.mkdir(parents=True, exist_ok=True)
     archive = target / Path(url).name
+    partial = archive.with_suffix(archive.suffix + ".part")
+    if partial.exists():
+        partial.unlink()
     digest = hashlib.sha256()
-    with urlopen(url, timeout=timeout) as response, archive.open("wb") as output:
-        while block := response.read(1024 * 1024):
-            digest.update(block)
-            output.write(block)
-    manifest = {"url": url, "archive": archive.name, "sha256": digest.hexdigest(), "citation": "Diemert et al. (2018), Criteo Uplift Prediction Dataset"}
-    (target / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    try:
+        with urlopen(url, timeout=timeout) as response, partial.open("wb") as output:
+            while block := response.read(1024 * 1024):
+                digest.update(block)
+                output.write(block)
+            resolved_url = response.geturl()
+        partial.replace(archive)
+    except Exception:
+        if partial.exists():
+            partial.unlink()
+        raise
+    scanned = scan_criteo(archive)
+    manifest = DatasetManifest(
+        source=scanned.source,
+        resolved_url=resolved_url,
+        sha256=digest.hexdigest(),
+        schema=scanned.schema,
+        row_count=scanned.row_count,
+        citation=CITATION,
+        license_status=LICENSE_STATUS,
+        retrieved_at_utc=datetime.now(timezone.utc).isoformat(),
+        compressed_size_bytes=archive.stat().st_size,
+    )
+    (target / "manifest.json").write_text(json.dumps(manifest.__dict__, indent=2), encoding="utf-8")
     return archive
+
+
+def write_criteo_partitions(
+    path: str | Path,
+    output_dir: str | Path,
+    seed: int = 2025,
+    chunksize: int = 250_000,
+) -> dict[str, object]:
+    """Write deterministic, compressed Parquet chunks without full-frame loading.
+
+    A seeded row hash is applied within treatment/conversion strata. Each split
+    is a directory of immutable parts, allowing bounded reads during model
+    fitting and final-test scoring.
+    """
+
+    root = Path(output_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    counts = {"train": 0, "validation": 0, "test": 0}
+    parts = {name: 0 for name in counts}
+    row_id = 0
+    for chunk in iter_criteo(path, chunksize=chunksize):
+        chunk = chunk.copy()
+        ids = np.arange(row_id, row_id + len(chunk), dtype=np.uint64)
+        row_id += len(chunk)
+        strata = chunk.treatment.astype(str) + chunk.conversion.astype(str)
+        # Hashing a stable row id and stratum prevents order-dependent splits
+        # while preserving treatment/outcome composition in expectation.
+        keys = pd.util.hash_pandas_object(
+            pd.DataFrame({"row_id": ids, "stratum": strata.to_numpy()}), index=False
+        ).to_numpy(dtype="uint64")
+        bucket = (keys ^ np.uint64(seed)) % np.uint64(100)
+        labels = np.where(bucket < 60, "train", np.where(bucket < 80, "validation", "test"))
+        for label in counts:
+            subset = chunk.loc[labels == label].copy()
+            if subset.empty:
+                continue
+            target = root / label
+            target.mkdir(parents=True, exist_ok=True)
+            output = target / f"part-{parts[label]:06d}.parquet"
+            subset.to_parquet(output, index=False, compression="zstd")
+            parts[label] += 1
+            counts[label] += len(subset)
+    manifest = {
+        "seed": seed,
+        "input": str(path),
+        "input_sha256": _sha256_file(path),
+        "schema": _schema(),
+        "counts": counts,
+        "parts": parts,
+        "fractions": {name: value / max(row_id, 1) for name, value in counts.items()},
+    }
+    (root / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return manifest
+
+
+def iter_partition(path: str | Path, split: str, chunksize: int = 250_000) -> Iterator[pd.DataFrame]:
+    """Yield validated rows from a split-partition directory."""
+
+    root = Path(path) / split
+    files = sorted(root.glob("part-*.parquet"))
+    if not files:
+        raise FileNotFoundError(f"no partition files found for split={split}: {root}")
+    for file in files:
+        frame = pd.read_parquet(file)
+        for start in range(0, len(frame), chunksize):
+            yield validate_criteo_frame(frame.iloc[start : start + chunksize])
 
 
 def load_criteo(path: str | Path, seed: int = 2025, max_rows: int | None = None) -> CriteoDataset:
