@@ -18,6 +18,8 @@ reports/*
 !reports/figures/*.csv
 !reports/policy_comparison.csv
 !reports/policy_results.csv
+!reports/business_case.csv
+!reports/business_case_claim.json
 !reports/run_manifest.json
 !reports/experiment_readout.pdf
 !reports/executive_case_study.pdf

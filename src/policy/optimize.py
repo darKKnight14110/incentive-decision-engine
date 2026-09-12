@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from scipy.optimize import Bounds, LinearConstraint, milp
+from scipy.sparse import csr_matrix, vstack as sparse_vstack
 
 @dataclass(frozen=True)
 class AllocationResult:
@@ -36,7 +37,10 @@ def optimize_allocation(candidates: pd.DataFrame, budget: float, maximum_contact
             row=np.where(frame.city_hour == key, frame.get("expected_incremental_orders", pd.Series(0,index=frame.index)), 0).astype(float); rows.append(row); lows.append(-np.inf); highs.append(limit)
     if minimum_roi is not None:
         rows.append((frame.expected_value - minimum_roi*frame.expected_cost).to_numpy(float)); lows.append(0); highs.append(np.inf)
-    result=milp(-values, integrality=integrality, bounds=bounds, constraints=LinearConstraint(np.vstack(rows), np.asarray(lows), np.asarray(highs)), options={"time_limit": 60})
+    # Keep the constraint matrix sparse. A dense user-by-action matrix becomes
+    # needlessly expensive as the candidate population grows.
+    constraint_matrix = sparse_vstack([csr_matrix(row) for row in rows], format="csr")
+    result=milp(-values, integrality=integrality, bounds=bounds, constraints=LinearConstraint(constraint_matrix, np.asarray(lows), np.asarray(highs)), options={"time_limit": 60})
     if not result.success and result.x is None: raise RuntimeError(f"allocation solver failed: {result.message}")
     selected=frame[np.asarray(result.x) > .5].copy(); selected=selected.sort_values("user_id").reset_index(drop=True)
     cost=float(selected.expected_cost.sum()); value=float(selected.expected_value.sum())

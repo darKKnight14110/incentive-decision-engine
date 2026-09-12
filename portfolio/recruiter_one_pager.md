@@ -18,14 +18,20 @@ evidence into budget- and capacity-constrained promotion allocations.
 
 ## Evidence and honesty
 
-The checked-in smoke result is intentionally inconclusive: +0.29 percentage
-points conversion ITT with a 95% interval from −0.33 to +0.91 points. The
-synthetic economic policy therefore declines to spend when priced actions are
-negative. No realized business impact is claimed.
+The checked-in smoke experiment is intentionally conservative: +0.29
+percentage points conversion ITT with a 95% interval from −0.33 to +0.91
+points. That interval crosses zero, so no positive Criteo impact is claimed.
+
+The separate synthetic marketplace business case is decision-shaped: at the
+canonical 50% budget, the capacity-aware optimizer produces ₹4,672 expected
+net contribution versus ₹1,232 for random allocation, or ₹6.88 more per
+eligible user (95% user-bootstrap interval ₹6.16 to ₹7.71). This is a simulated
+estimated illustration with explicit economics and capacity, not realized
+impact. A geo-randomized pilot is the proposed validation step.
 
 ## Where to look
 
 - Code: `src/experimentation`, `src/causal`, `src/policy`, `src/marketplace`, `src/monitoring`
 - Data quality/PIT: `src/data`, `sql/`, `tests/`
-- Decision artifacts: `reports/` and `docs/executive_case_study.pdf`
+- Decision artifacts: `reports/`, [`docs/business_case.md`](../docs/business_case.md), and `docs/executive_case_study.pdf`
 - Interactive readout: `streamlit run app/dashboard.py`

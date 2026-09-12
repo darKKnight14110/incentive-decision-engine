@@ -12,4 +12,7 @@ and bootstrap intervals. Predictive AUC is not treated as uplift evidence.
 **Limitations.** Individual effects are estimates, not observed truth. The
 bootstrap holds the fitted ranking fixed and does not include model-selection
 uncertainty. Criteo exposure is post-assignment. Synthetic economics,
-capacity, and rollout results are simulations, not realized impact.
+capacity, and rollout results are simulations, not realized impact. The
+business-case headline uses the explicit assumptions in
+`configs/economics.yaml`; it is useful for comparing decision logic and
+uncertainty handling, not for forecasting a launch P&L.

@@ -1,141 +1,183 @@
 # Incentive Decision Engine
 
-**End-to-end causal decision system for budget-constrained promotion targeting.**
+An end-to-end data science project for deciding who should receive a
+promotion when the objective is incremental contribution margin, not treated
+conversion rate.
 
-This project answers a product question that a propensity model cannot answer:
+The repository combines randomized-experiment measurement, heterogeneous
+treatment-effect estimation, unit economics, integer optimization, and
+marketplace-capacity controls. It is designed as a reproducible portfolio
+project: every headline number is tagged as measured, estimated, or simulated.
 
-> Given a fixed promotion budget, which eligible customers should receive no
-> offer, a small offer, or a large offer to maximize incremental contribution
-> margin while respecting contact and marketplace constraints?
+## Decision and results
 
-## Recruiter snapshot
+The decision is whether to send no offer, a small offer, or a large offer to an
+eligible customer under a fixed budget and operational constraints.
 
-| Dimension | Evidence in this repository |
-| --- | --- |
-| Product decision | Incremental contribution margin per eligible customer, not treated conversion rate |
-| Experimentation | Criteo randomized advertising data, SRM/balance checks, ITT, confidence intervals, power/MDE |
-| Causal ML | Constant-effect, T-, X-, and cross-fitted DR learners; Qini, AUUC, uplift deciles, policy value |
-| Decisioning | Redemption-adjusted unit economics and multiple-choice knapsack optimization |
-| Marketplace | City-hour capacity, delivery/cancellation guardrails, cluster-randomized validation design |
-| Production thinking | Point-in-time feature contracts, drift monitoring, persistent holdout, staged rollout and rollback |
-| Stack | Python, pandas, NumPy, SciPy, scikit-learn, DuckDB, SQL, Streamlit, matplotlib |
+The checked-in offline run has two deliberately separate results:
 
-### What the current evidence says
+1. **Measured experiment result.** On 12,000 deterministic Criteo-shaped
+   randomized rows, the conversion ITT is **+0.29 percentage points** with a
+   95% interval of **−0.33 to +0.91 points**. The interval crosses zero, so the
+   project does not claim positive advertising impact from this smoke fixture.
+2. **Business decision illustration.** On 500 deterministic synthetic
+   marketplace users with explicit INR economics and city-hour capacity, the
+   capacity-aware optimizer produces **₹4,672 expected net contribution at the
+   canonical 50% budget versus ₹1,232 for random allocation**. The difference
+   is **₹3,439 in aggregate, or ₹6.88 per eligible user**, with a user-bootstrap
+   interval of **₹6.16 to ₹7.71 per user**. This is an estimated synthetic
+   illustration, not realized business impact.
 
-The checked-in smoke run is deliberately conservative. On 12,000 deterministic
-Criteo-shaped randomized rows, the estimated conversion ITT is **+0.29pp** with
-a 95% interval of **−0.33pp to +0.91pp**. Because the interval crosses zero, the
-repository makes no positive business-impact claim. Under the configured
-synthetic INR economics, the matched-budget optimizer selects no paid offer when
-all priced actions have negative expected net value. That is the intended
-decision behavior, not a hidden failure.
+The second result makes the business decision concrete without pretending that
+Criteo contains marketplace margins or delivery capacity. The assumptions are
+in [`src/policy/business_case.py`](src/policy/business_case.py) and are the
+first inputs to replace with validated unit economics in a production pilot.
 
-Full Criteo reproduction is available but opt-in because the public raw file is
-large and is not redistributed here. Criteo results are advertising
-incrementality; marketplace economics and capacity results are simulated.
+## What was implemented
+
+### Experiment and data layer
+
+- Official Criteo v2.1 downloader/loader with source, SHA-256, schema, row
+  count, and citation manifest.
+- Strict validation of `f0`–`f11`, assignment, exposure, visit, and conversion.
+- Deterministic stratified 60/20/20 train, validation, and final-test splits.
+- SRM and balance diagnostics, A/A calibration, ITT with confidence intervals,
+  and power/MDE calculations.
+- Offline smoke data for clean-clone builds without network access.
+
+### Causal modeling
+
+- Calibrated logistic and LightGBM propensity baselines.
+- Constant-effect, T-, X-, and cross-fitted doubly robust learners.
+- Known-ground-truth simulations for constant, heterogeneous, confounded, and
+  poor-overlap data-generating processes.
+- Qini/AUUC, uplift deciles, fixed-policy bootstrap intervals, and held-out
+  randomized policy-value evaluation.
+- Explicit separation of propensity prediction from incremental response.
+
+### Value and constrained decisioning
+
+- Redemption-adjusted offer cost and contribution-margin calculations.
+- Treat-none, treat-all, random, propensity, uplift, net-value, and optimized
+  policy comparisons at matched budgets and on the same eligible population.
+- Multiple-choice integer optimization with SciPy/HiGHS for one action per
+  user, budget, contact volume, ROI, segment, and city-hour capacity limits.
+- Exhaustive-fixture and greedy/Lagrangian cross-checks, plus a discrete
+  finite-difference shadow-price proxy.
+- A synthetic multi-action business case with positive and negative actions,
+  congestion-aware capacity, explicit assumptions, and bootstrap uncertainty.
+
+### Rollout and delivery
+
+- Eight-week rollout simulation with persistent holdout, validation launch,
+  staged ramp gates, pause/rollback rules, retraining triggers, and delayed
+  outcome monitoring.
+- Drift, calibration, policy-mix, cancellation, refund, delivery-time, CPIO,
+  budget-utilization, and expected-versus-realized value checks.
+- Streamlit dashboard, experiment readout PDF, executive case study PDF,
+  technical appendix, model card, geo-experiment memo, rollout plan, and a
+  ten-minute interview deck.
+- Four thin narrative notebooks that call reusable `src/` functions rather than
+  hiding analysis in notebook cells.
 
 ## Start here
 
-- [Recruiter one-pager](portfolio/recruiter_one_pager.md)
-- [Resume-ready bullets](portfolio/resume_bullets.md)
-- [Executive case study PDF](docs/executive_case_study.pdf)
-- [Technical appendix](docs/technical_appendix.md)
 - [Experiment readout](reports/experiment_readout.pdf)
-- [Interview deck](reports/interview_deck.pptx)
+- [Executive case study](docs/executive_case_study.pdf)
+- [Synthetic business case](docs/business_case.md)
+- [Synthetic business claim](reports/business_case_claim.json)
+- [Matched-budget policy table](reports/business_case.csv)
+- [Technical appendix](docs/technical_appendix.md)
 - [Model card](docs/model_card.md)
 - [Rollout plan](docs/rollout_plan.md)
-- [Dashboard](app/dashboard.py)
+- [Interview deck](reports/interview_deck.pptx)
+- [Streamlit dashboard](app/dashboard.py)
+- [Resume bullets](portfolio/resume_bullets.md)
 
-## Run it
+## Run the project
 
-Install the project and development dependencies:
+Install dependencies:
 
 ```powershell
 python -m pip install -e ".[dev]"
 ```
 
-Run the deterministic offline smoke pipeline on Windows:
+Run the deterministic offline build and tests:
 
 ```powershell
-python -m src.reporting.metric_tree
-python -m src.data.generate_marketplace --output-dir data/raw
-python -m src.data.build_features --raw-dir data/raw --output-path data/processed/eligible_users.parquet --quality-report data/processed/data_quality_issues.csv
-python -m src.data.validate_data --raw-dir data/raw --report-path data/processed/data_contract_report.csv
 python -m src.pipeline --mode smoke --output-dir reports
 python -m pytest -q
 ```
 
-The Makefile provides equivalent `build`, `test`, `download-criteo`,
-`reproduce-full`, and `test-full` targets on systems with GNU Make.
+On systems with GNU Make, the equivalent gates are:
 
-To reproduce the public randomized experiment:
+```text
+make build
+make test
+```
+
+To reproduce the public randomized experiment, download the raw Criteo file
+explicitly and then run the full pipeline:
 
 ```powershell
 python -m src.experimentation.criteo --download-dir data/raw/criteo
 python -m src.pipeline --mode full --output-dir reports
 ```
 
-Raw data, caches, and processed tables remain ignored. Each run writes a
-manifest with seeds, row counts, input hashes, configuration, and runtime
-metadata.
+Launch the dashboard with:
+
+```powershell
+streamlit run app/dashboard.py
+```
+
+Raw data, caches, trained models, and interim tables remain ignored. Generated
+figures, reports, and manifests are reproducible from the configured seed.
 
 ## System design
 
 ```text
-synthetic marketplace tables ──┐
-                               ├─ SQL/PIT feature contract ──┐
-Criteo randomized data ───────┘                              │
-                                                             ▼
-                 experiment measurement → causal response estimation
-                                             │
-                                             ▼
-                    INR value model → matched-budget policy comparison
-                                             │
-                                             ▼
-                   constrained allocation → capacity-aware rollout control
+Criteo randomized data ──> SRM / ITT / held-out uplift ──> policy value
+                                                              │
+synthetic marketplace ──> INR economics ──> constrained optimizer ──> rollout
+                                                              │
+                                                capacity + monitoring controls
 ```
 
-The two data sources are intentionally never joined. Criteo supports measured
-advertising incrementality and held-out policy evaluation. The synthetic
-marketplace supports multi-action offers, economics, capacity, interference,
-and rollout demonstrations.
+The two data sources are intentionally never joined. Criteo supplies measured
+advertising incrementality. Synthetic marketplace data supplies multi-action
+economics, capacity, interference, and rollout demonstrations.
 
 ## Repository layout
 
 ```text
-portfolio/       recruiter one-pager and resume bullets
-configs/         economic, experiment, modeling, policy, and rollout settings
-src/data/        seeded generation, DuckDB loading, PIT features, validation
-src/analytics/   reusable funnel, lifecycle, and cohort helpers
-src/experimentation/  Criteo loading, diagnostics, ITT, power/MDE
-src/prediction/  calibrated propensity baselines
-src/causal/      DGPs, estimators, meta-learners, uplift/policy metrics
-src/policy/      value conversion, baselines, constrained optimizer
-src/marketplace/ capacity and geo-experiment design
-src/monitoring/  drift and rollout decisions
-src/pipeline.py  reproducible smoke/full artifact generation
-sql/             schema, funnels, cohorts, features, experiment, quality views
-tests/           44 contract, causal, optimizer, and pipeline tests
-docs/            metric contract, model card, rollout, technical, and executive docs
-reports/         checked-in figures, PDFs, deck, comparison tables, and manifests
-app/             lightweight Streamlit decision dashboard
+src/experimentation/  Criteo loading, diagnostics, ITT, power
+src/prediction/       calibrated propensity baselines
+src/causal/           simulations, estimators, meta-learners, uplift metrics
+src/policy/           value conversion, baselines, optimizer, business case
+src/marketplace/      capacity and geo-experiment design
+src/monitoring/       drift and rollout decisions
+src/data/             seeded marketplace data, PIT features, validation
+src/pipeline.py       reproducible smoke/full artifact generation
+configs/              experiment, modeling, policy, economics, rollout settings
+sql/                  schema, funnel, cohort, experiment, and quality views
+tests/                data-contract, leakage, causal, optimizer, and smoke tests
+docs/                 technical, experiment, model, rollout, and executive docs
+reports/              checked-in figures, tables, PDFs, deck, and manifests
+portfolio/            concise project summary and resume-ready framing
+app/                  lightweight Streamlit decision dashboard
 ```
 
-## Methodological guardrails
+## Guardrails and limitations
 
-- Assignment, not exposure, is the Criteo causal treatment.
-- Every modeling feature is strictly pre-treatment: `event_ts < decision_ts`.
-- Predictive propensity metrics are not presented as uplift evidence.
-- Policy comparisons use the same eligible population and matched budgets.
+- Assignment, not exposure, is the causal treatment in Criteo.
+- Features are strictly pre-treatment; post-assignment exposure is descriptive
+  only.
+- Predictive propensity metrics are diagnostics, not uplift evidence.
+- Policy comparisons use identical users and matched budgets.
 - Individual treatment effects are estimates, not observed truth.
-- Bootstrap intervals hold the fitted ranking fixed and exclude model-selection uncertainty.
-- Synthetic financial, capacity, and rollout outputs are labeled simulated.
-- A persistent holdout is carved before allocation; rollback and retraining thresholds are preconfigured.
-
-## Resume positioning
-
-Use the bullets in [portfolio/resume_bullets.md](portfolio/resume_bullets.md).
-Do not add a percentage improvement unless a full-data held-out policy-value
-interval supports it. The current smoke evidence supports a defensible
-“established no reliable positive lift under these assumptions” conclusion, not
-an impact claim.
+- Bootstrap intervals hold the fitted ranking fixed and exclude model-selection
+  uncertainty.
+- Synthetic economics, capacity, interference, and rollout outcomes are not
+  measured marketplace impact.
+- A real launch requires validating offer costs, margins, response, and
+  city-hour capacity in a geo-randomized pilot behind a persistent holdout.

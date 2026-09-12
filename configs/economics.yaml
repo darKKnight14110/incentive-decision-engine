@@ -1,0 +1,12 @@
+# Synthetic marketplace assumptions used only for the business-case illustration.
+# Replace these with finance-approved estimates before any real rollout.
+business_case:
+  contribution_margin_inr: 520.0
+  offers:
+    no_offer: {face_value_inr: 0.0, redemption_rate: 0.0, response_multiplier: 0.0}
+    small_offer: {face_value_inr: 18.0, redemption_rate: 0.35, response_multiplier: 1.0}
+    large_offer: {face_value_inr: 35.0, redemption_rate: 0.55, response_multiplier: 1.25}
+  contact_volume_fraction: 0.50
+  capacity_fraction_of_positive_demand: 0.28
+  canonical_budget_fraction: 0.50
+  bootstrap_repetitions: 500

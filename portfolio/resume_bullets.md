@@ -15,15 +15,23 @@ learners, Qini/AUUC and randomized policy-value evaluation, known-ground-truth
 estimator recovery, and SciPy/HiGHS constrained optimization in a reproducible
 Python/DuckDB pipeline with 44 tests.
 
-## Honest result bullet
+## Business result bullet
 
-Established a conservative decision rule on a deterministic smoke experiment:
-the estimated conversion lift was +0.29pp with a 95% interval spanning zero,
-so the configured economic policy withheld paid offers rather than claiming
-unsupported incremental impact.
+Built a capacity-aware synthetic marketplace scenario in which the optimized
+50%-budget policy generated ₹4,672 expected contribution margin versus ₹1,232
+for random allocation, a ₹3,439 aggregate difference (₹6.88 per eligible user;
+95% bootstrap interval ₹6.16–₹7.71), with all economics and capacity inputs
+explicitly versioned and labelled as simulated.
+
+## Measurement caveat bullet
+
+On the deterministic Criteo smoke fixture, estimated conversion ITT was +0.29pp
+with a 95% interval spanning zero; retained the null result and specified a
+geo-randomized pilot rather than claiming unsupported advertising impact.
 
 ## Customization rule
 
-Only replace the honest-result bullet with a percentage after running the full
-Criteo reproduction and confirming that the held-out policy-value interval is
-positive at a named matched budget.
+Do not present the synthetic business-case result as realized impact. Replace
+or supplement it with a production percentage only after running the full
+Criteo reproduction and confirming a positive held-out policy-value interval
+at a named matched budget.

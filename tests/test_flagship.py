@@ -12,6 +12,7 @@ from src.causal.simulate import generate_causal_data
 from src.marketplace.geo_experiment import geo_experiment_design
 from src.monitoring.drift import population_stability_index
 from src.policy.optimize import optimize_allocation
+from src.policy.business_case import run_business_case
 
 
 def test_smoke_criteo_is_valid_and_partitioned_deterministically():
@@ -61,3 +62,16 @@ def test_optimizer_obeys_budget_and_one_action_constraint():
 def test_geo_design_and_psi_are_finite():
     assert geo_experiment_design(10, .2, 100).minimum_detectable_effect > 0
     assert population_stability_index(np.arange(10), np.arange(10)) < .01
+
+
+def test_business_case_is_reproducible_and_has_a_decision_shaped_claim():
+    first = run_business_case(seed=11, n_users=40, bootstrap_repetitions=40)
+    second = run_business_case(seed=11, n_users=40, bootstrap_repetitions=40)
+    claim = first.canonical_claim
+    assert claim == second.canonical_claim
+    assert claim["optimized_expected_value_inr"] > claim["random_expected_value_inr"]
+    assert claim["ci_low_inr_per_eligible_user"] > 0
+    assert first.optimizer_result.assignments.user_id.is_unique
+    assert first.optimizer_result.expected_cost <= float(
+        first.candidates.loc[first.candidates.action == "small_offer", "expected_cost"].sum() * .5
+    ) + 1e-8
