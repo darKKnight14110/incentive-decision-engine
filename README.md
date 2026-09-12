@@ -58,7 +58,7 @@ first inputs to replace with validated unit economics in a production pilot.
 - Constant-effect, T-, X-, and cross-fitted doubly robust learners, with
   fold-level predictions and persisted model metadata.
 - Known-ground-truth simulations for constant, heterogeneous, confounded, and
-  poor-overlap data-generating processes.
+  poor-overlap data-generating processes, with repeated recovery summaries.
 - Qini/AUUC, uplift deciles, fixed-policy bootstrap intervals, and held-out
   randomized policy-value evaluation.
 - Explicit separation of propensity prediction from incremental response.

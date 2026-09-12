@@ -13,7 +13,7 @@ contracts, held-out policy evaluation, staged rollout gates, and drift monitorin
 Implemented SRM/balance diagnostics, ITT and power analysis, constant/T/X/DR
 learners, Qini/AUUC and randomized policy-value evaluation, known-ground-truth
 estimator recovery, and SciPy/HiGHS plus CP-SAT constrained optimization in a
-reproducible Python/DuckDB pipeline with 50 tests.
+reproducible Python/DuckDB pipeline with 55 tests.
 
 ## Business result bullet
 
