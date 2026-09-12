@@ -1,0 +1,10 @@
+# Runtime controls for the modular targeting architecture.
+# The smoke pipeline keeps one cycle so the canonical 50% comparison is exact;
+# production deployments can increase total_cycles and persist snapshots.
+targeting:
+  solver: highs
+  total_cycles: 1
+  safety_buffer: 0.0
+  model_version: uplift-t-learner-v1
+  policy_version: mckp-highs-v1
+  assignment_schema_version: v1
