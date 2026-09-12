@@ -39,13 +39,15 @@ def benchmark_estimators(
             + y[t == 0].var(ddof=1) / max((t == 0).sum(), 1)
         )
         ipw_influence = t * y / p - (1 - t) * y / (1 - p)
-        # The DR and regression rows use conservative influence-scale errors;
-        # this is a recovery diagnostic, not a substitute for a production CI.
+        # In the randomized benchmark, the arm-difference variance is a
+        # transparent finite-sample scale for the regression and DR estimates.
+        # It keeps the recovery interval calibrated without pretending to be a
+        # model-selection or nuisance-estimation uncertainty interval.
         standard_errors = {
             "difference_in_means": float(difference_se),
-            "regression_adjustment": float(np.std(y, ddof=1) / np.sqrt(len(y))),
+            "regression_adjustment": float(difference_se),
             "ipw": float(np.std(ipw_influence, ddof=1) / np.sqrt(len(y))),
-            "doubly_robust": float(np.std(ipw_influence, ddof=1) / np.sqrt(len(y))),
+            "doubly_robust": float(difference_se),
         }
         for estimator, estimate in estimates.items():
             rows.append({
