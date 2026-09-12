@@ -8,5 +8,5 @@ The raw archive and Parquet partitions remain local and gitignored.
 - [x] Inspect `reports/run_manifest.json`, policy-value intervals, and all guardrails.
 - [x] Confirm README and artifacts distinguish measured, estimated, and simulated quantities.
 - [x] Confirm no raw Criteo rows, caches, or trained models are tracked.
-- [ ] Commit the verified changes with an imperative message.
+- [x] Commit the verified changes with an imperative message.
 - [ ] Create the local `v1.0` tag only after the full-data acceptance checks pass.
