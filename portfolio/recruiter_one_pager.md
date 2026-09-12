@@ -22,9 +22,13 @@ evidence into budget- and capacity-constrained promotion allocations.
 
 ## Evidence and honesty
 
-The checked-in smoke experiment is intentionally conservative: +0.29
-percentage points conversion ITT with a 95% interval from −0.33 to +0.91
-points. That interval crosses zero, so no positive Criteo impact is claimed.
+The checked-in full Criteo reproduction uses all 13.98M validated rows: +0.115
+percentage points conversion ITT (95% CI +0.108 to +0.122) and +0.118
+percentage points locked held-out policy value (95% CI +0.103 to +0.134).
+Validation selected the
+constant-effect baseline over the T-learner, so reliable heterogeneity was not
+established. The offline smoke experiment remains a conservative simulated
+RCT-shaped check: +0.29 points with a 95% interval from −0.33 to +0.91.
 
 The separate synthetic marketplace business case is decision-shaped: at the
 canonical 50% budget, the capacity-aware optimizer produces ₹2,038 expected
