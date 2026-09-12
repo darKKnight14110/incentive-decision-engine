@@ -267,6 +267,7 @@ def write_criteo_partitions(
     output_dir: str | Path,
     seed: int = 2025,
     chunksize: int = 250_000,
+    use_duckdb: bool = True,
 ) -> dict[str, object]:
     """Write deterministic, compressed Parquet chunks without full-frame loading.
 
@@ -275,6 +276,14 @@ def write_criteo_partitions(
     fitting and final-test scoring.
     """
 
+    if use_duckdb:
+        try:
+            return _write_criteo_partitions_duckdb(path, output_dir, seed=seed)
+        except ImportError:
+            # The package declares DuckDB as a runtime dependency, but keeping
+            # the bounded pandas implementation makes the loader usable in
+            # minimal environments and preserves a clear fallback path.
+            pass
     root = Path(output_dir)
     root.mkdir(parents=True, exist_ok=True)
     counts = {"train": 0, "validation": 0, "test": 0}
@@ -316,6 +325,71 @@ def write_criteo_partitions(
         "stratum_counts": stratum_counts,
         "coverage_verified": sum(counts.values()) == row_id,
         "exclusive_verified": True,
+    }
+    (root / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return manifest
+
+
+def _write_criteo_partitions_duckdb(
+    path: str | Path,
+    output_dir: str | Path,
+    seed: int = 2025,
+) -> dict[str, object]:
+    """Ingest a compressed CSV through DuckDB and emit one Parquet per split."""
+
+    import duckdb
+
+    source = Path(path)
+    root = Path(output_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    for split in ("train", "validation", "test"):
+        (root / split).mkdir(parents=True, exist_ok=True)
+    escaped = source.resolve().as_posix().replace("'", "''")
+    connection = duckdb.connect()
+    try:
+        connection.execute(
+            "CREATE TEMP TABLE criteo_source AS "
+            "SELECT row_number() OVER () - 1 AS row_id, * "
+            f"FROM read_csv_auto('{escaped}', header=true, compression='gzip')"
+        )
+        columns = ", ".join(f'"{column}"' for column in REQUIRED_COLUMNS)
+        # Hashing the stable row id and treatment/outcome stratum preserves
+        # composition in expectation while avoiding a pandas full-frame join.
+        bucket = f"hash(row_id + {int(seed)}, treatment, conversion) % 100"
+        labels = {
+            "train": f"({bucket}) < 60",
+            "validation": f"({bucket}) >= 60 AND ({bucket}) < 80",
+            "test": f"({bucket}) >= 80",
+        }
+        counts: dict[str, int] = {}
+        stratum_counts: dict[str, dict[str, int]] = {}
+        for split, predicate in labels.items():
+            target = root / split / "part-000000.parquet"
+            connection.execute(
+                f"COPY (SELECT {columns} FROM criteo_source WHERE {predicate}) "
+                f"TO '{target.resolve().as_posix()}' (FORMAT PARQUET, COMPRESSION ZSTD)"
+            )
+            counts[split] = int(connection.execute(f"SELECT count(*) FROM criteo_source WHERE {predicate}").fetchone()[0])
+            strata = connection.execute(
+                f"SELECT CAST(treatment AS VARCHAR) || CAST(conversion AS VARCHAR) AS stratum, count(*) "
+                f"FROM criteo_source WHERE {predicate} GROUP BY 1 ORDER BY 1"
+            ).fetchall()
+            stratum_counts[split] = {str(row[0]): int(row[1]) for row in strata}
+        row_count = int(connection.execute("SELECT count(*) FROM criteo_source").fetchone()[0])
+    finally:
+        connection.close()
+    manifest = {
+        "seed": int(seed),
+        "input": str(source),
+        "input_sha256": _sha256_file(source),
+        "schema": _schema(),
+        "counts": counts,
+        "parts": {split: 1 for split in labels},
+        "fractions": {name: value / max(row_count, 1) for name, value in counts.items()},
+        "stratum_counts": stratum_counts,
+        "coverage_verified": sum(counts.values()) == row_count,
+        "exclusive_verified": True,
+        "ingestion_engine": "duckdb",
     }
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return manifest
