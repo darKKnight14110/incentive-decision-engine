@@ -14,15 +14,22 @@ project: every headline number is tagged as measured, estimated, or simulated.
 The decision is whether to send no offer, a small offer, or a large offer to an
 eligible customer under a fixed budget and operational constraints.
 
-The checked-in offline run has two deliberately separate results:
+The checked-in evidence has three deliberately separate results:
 
-1. **Smoke inference check.** On 12,000 deterministic, simulated
+1. **Full-data measured result.** On all **13,979,592 validated Criteo rows**,
+   conversion ITT is **+0.115 percentage points** (95% CI **+0.108 to
+   +0.122**, SRM p=0.9994). The locked held-out policy value is **+0.118
+   percentage points** (95% CI **+0.103 to +0.134**) at the validation-selected
+   threshold. Validation selected the constant-effect baseline over the
+   T-learner, so the correct conclusion is **reliable heterogeneity was not
+   established**. Full runtime was 159 seconds with a 183 MB peak-memory
+   snapshot on the recorded environment.
+2. **Smoke inference check.** On 12,000 deterministic, simulated
    Criteo-shaped randomized rows, the conversion ITT is **+0.29 percentage
    points** with a 95% interval of **−0.33 to +0.91 points**. The interval
-   crosses zero, so the project does not claim positive advertising impact from
-   this smoke fixture. The complete Criteo result is produced only by
-   `make reproduce-full` after the explicit download.
-2. **Business decision illustration.** On 250 deterministic synthetic
+   crosses zero, so the smoke fixture is not used as advertising-impact
+   evidence.
+3. **Business decision illustration.** On 250 deterministic synthetic
    marketplace users with explicit INR economics and city-hour capacity, the
    capacity-aware optimizer produces **₹2,038 expected net contribution at the
    canonical 50% budget versus ₹723 for random allocation**. The difference

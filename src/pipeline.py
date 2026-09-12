@@ -10,7 +10,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from pptx import Presentation
 from pptx.util import Inches
 
-from src.experimentation.criteo import smoke_criteo, load_criteo, write_criteo_partitions, iter_partition, iter_criteo
+from src.experimentation.criteo import smoke_criteo, load_criteo, load_partition, write_criteo_partitions, iter_partition, iter_criteo
 from src.experimentation.estimation import estimate_itt, estimate_itt_stream, bootstrap_difference
 from src.experimentation.diagnostics import aa_pvalues
 from src.causal.meta_learners import ConstantEffectLearner, TLearner
@@ -87,38 +87,42 @@ def run(mode: str = "smoke", output_dir: str | Path = "reports", criteo_path: st
         partition_manifest = write_criteo_partitions(source, partition_root, seed=seed)
         estimate=estimate_itt_stream(iter_criteo(source), "conversion", expected_probability=float(.85), fail_on_srm=True)
         # Keep model fitting bounded while policy evaluation and ITT use every
-        # validated row from the partitioned archive.
-        dataset=load_criteo(source, seed=seed, max_rows=250_000)
-        frame=dataset.frame
+        # validated row from the partitioned archive. Samples are drawn from
+        # the persisted train/validation/test splits, never from file order.
+        train_frame = load_partition(partition_root, "train", max_rows=250_000, seed=seed)
+        validation_frame = load_partition(partition_root, "validation", max_rows=100_000, seed=seed + 1)
+        test_frame = load_partition(partition_root, "test", max_rows=100_000, seed=seed + 2)
+        frame = pd.concat([train_frame, validation_frame, test_frame], ignore_index=True)
         model_cap=250_000
     else:
-        frame=smoke_criteo(seed=seed); dataset=None; model_cap=len(frame); partition_manifest=None
+        frame=smoke_criteo(seed=seed); train_frame=frame.iloc[:int(.6*len(frame))].copy(); validation_frame=frame.iloc[int(.6*len(frame)):int(.8*len(frame))].copy(); test_frame=frame.iloc[int(.8*len(frame)):].copy(); model_cap=len(train_frame); partition_manifest=None
         estimate=estimate_itt(frame,"conversion",expected_probability=float(frame.treatment.mean()),fail_on_srm=False)
-    boot=bootstrap_difference(frame,"conversion",repetitions=100 if mode=="smoke" else 500,seed=seed)
-    x=frame[[f"f{i}" for i in range(12)]].to_numpy(); y=frame.conversion.to_numpy(); t=frame.treatment.to_numpy()
-    if dataset is not None:
-        train=dataset.train_index[:model_cap]; validation=dataset.validation_index; test=dataset.test_index
-    else:
-        rng=np.random.default_rng(seed); order=rng.permutation(len(frame)); train=order[:int(.6*len(frame))]; validation=order[int(.6*len(frame)):int(.8*len(frame))]; test=order[int(.8*len(frame)):]
-    learner=TLearner(seed).fit(x[train],t[train],y[train])
-    constant_learner=ConstantEffectLearner().fit(x[train],t[train],y[train])
-    validation_score=learner.predict(x[validation])
-    constant_validation_score=constant_learner.predict(x[validation])
+    if mode == "smoke":
+        train_frame, validation_frame, test_frame = frame.iloc[:int(.6*len(frame))].copy(), frame.iloc[int(.6*len(frame)):int(.8*len(frame))].copy(), frame.iloc[int(.8*len(frame)):].copy()
+    boot=bootstrap_difference(frame,"conversion",repetitions=100,seed=seed) if mode == "smoke" else None
+    train_x=train_frame[[f"f{i}" for i in range(12)]].to_numpy(); train_y=train_frame.conversion.to_numpy(); train_t=train_frame.treatment.to_numpy()
+    validation_x=validation_frame[[f"f{i}" for i in range(12)]].to_numpy(); validation_y=validation_frame.conversion.to_numpy(); validation_t=validation_frame.treatment.to_numpy()
+    test_x=test_frame[[f"f{i}" for i in range(12)]].to_numpy(); test_y=test_frame.conversion.to_numpy(); test_t=test_frame.treatment.to_numpy()
+    learner=TLearner(seed).fit(train_x,train_t,train_y)
+    constant_learner=ConstantEffectLearner().fit(train_x,train_t,train_y)
+    validation_score=learner.predict(validation_x)
+    constant_validation_score=constant_learner.predict(validation_x)
     selection=select_uplift_model(
-        y[validation], t[validation], {"t-learner": validation_score},
-        constant_validation_score, assignment_probability=float(t[train].mean()), target_rate=.20,
+        validation_y, validation_t, {"t-learner": validation_score},
+        constant_validation_score, assignment_probability=float(train_t.mean()), target_rate=.20,
     )
     active_learner=constant_learner if selection.selected_model == "constant-effect" else learner
-    score=active_learner.predict(x[test])
+    score=active_learner.predict(test_x)
     threshold=float(selection.threshold)
-    test_y,test_t=y[test],t[test]
     target=(score >= threshold).astype(int)
     uplift=uplift_deciles(test_y,test_t,score)
     if mode == "full":
         policy_stream = policy_value_stream(iter_partition(partition_root, "test"), active_learner, [f"f{i}" for i in range(12)], threshold, assignment_probability=float(estimate.treated_n / max(estimate.treated_n + estimate.control_n, 1)))
         policy_point=policy_stream["point"]
+        policy_ci_low, policy_ci_high = policy_stream["ci_low"], policy_stream["ci_high"]
     else:
-        policy_point=policy_value(test_y,test_t,target,assignment_probability=float(t.mean()))
+        policy_point=policy_value(test_y,test_t,target,assignment_probability=float(train_t.mean()))
+        policy_ci_low = policy_ci_high = float("nan")
     qx,qy=qini_curve(test_y,test_t,score)
     # Keep the checked-in fixture compact enough for offline CI. The module
     # supports larger scenarios when run outside the smoke pipeline.
@@ -163,19 +167,19 @@ def run(mode: str = "smoke", output_dir: str | Path = "reports", criteo_path: st
     ax.set_xticks(range(len(sensitivity_pivot.columns)),[f"{value:.0%}" for value in sensitivity_pivot.columns]); ax.set_yticks(range(len(sensitivity_pivot.index)),[f"{value:.0%}" for value in sensitivity_pivot.index]);
     ax.set(xlabel="Capacity as fraction of positive demand",ylabel="Contribution-margin multiplier",title="Synthetic sensitivity: optimizer advantage vs random"); fig.colorbar(image,ax=ax,label="INR total at 50% budget"); fig.tight_layout(); sensitivity_path=figures/"business_case_sensitivity.png"; fig.savefig(sensitivity_path,dpi=140); plt.close(fig)
     fig,ax=plt.subplots(); ax.bar(uplift.decile,uplift.uplift); ax.set(xlabel="Predicted-uplift decile",ylabel="Held-out uplift",title="Estimated uplift by decile"); fig.tight_layout(); decile_path=figures/"uplift_deciles.png"; fig.savefig(decile_path,dpi=140); plt.close(fig)
+    criteo_label = "measured full-data Criteo" if mode == "full" else "simulated Criteo-shaped smoke"
     rng=np.random.default_rng(seed)
     support={}
     fig,ax=plt.subplots(); ax.bar(["eligible","pre-treatment sessions","prior orders"],[len(candidates.user_id.unique()),float(candidates.user_id.nunique()*2.3),float(candidates.user_id.nunique()*.8)]); ax.set_title("Simulated marketplace funnel"); funnel_path=figures/"funnel.png"; fig.savefig(funnel_path,dpi=120); plt.close(fig); support["funnel"]=funnel_path
     fig,ax=plt.subplots(); ax.imshow(rng.uniform(.1,.8,(5,7)),aspect="auto"); ax.set_title("Simulated retention heatmap"); retention_path=figures/"retention_heatmap.png"; fig.savefig(retention_path,dpi=120); plt.close(fig); support["retention"]=retention_path
     fig,ax=plt.subplots(); candidates.segment.value_counts().plot.bar(ax=ax); ax.set_title("Simulated lifecycle segments"); life_path=figures/"lifecycle_segments.png"; fig.savefig(life_path,dpi=120); plt.close(fig); support["lifecycle"]=life_path
     fig,ax=plt.subplots(); ax.plot(budgets_frame.budget_inr,budgets_frame.shadow_price_proxy,"o-"); ax.axhline(1,ls="--"); ax.set_title("Discrete shadow-price proxy (simulated)"); shadow_path=figures/"shadow_price_curve.png"; fig.savefig(shadow_path,dpi=120); plt.close(fig); support["shadow"]=shadow_path
-    fig,ax=plt.subplots(); ax.hist(aa_pvalues(y,repetitions=100,seed=seed),bins=10); ax.set_title("A/A p-value calibration (simulated)"); aa_path=figures/"aa_test_pvalue_histogram.png"; fig.savefig(aa_path,dpi=120); plt.close(fig); support["aa"]=aa_path
-    fig,ax=plt.subplots(); ax.hist(t[test],bins=2,alpha=.7,label="assignment"); ax.set_title("Treatment overlap diagnostic (measured/smoke)"); overlap_path=figures/"overlap_diagnostics.png"; fig.savefig(overlap_path,dpi=120); plt.close(fig); support["overlap"]=overlap_path
+    fig,ax=plt.subplots(); ax.hist(aa_pvalues(frame.conversion.to_numpy(),repetitions=100,seed=seed),bins=10); ax.set_title("A/A p-value calibration (simulated)"); aa_path=figures/"aa_test_pvalue_histogram.png"; fig.savefig(aa_path,dpi=120); plt.close(fig); support["aa"]=aa_path
+    fig,ax=plt.subplots(); ax.hist(test_t,bins=2,alpha=.7,label="assignment"); ax.set_title(f"Treatment overlap diagnostic ({criteo_label})"); overlap_path=figures/"overlap_diagnostics.png"; fig.savefig(overlap_path,dpi=120); plt.close(fig); support["overlap"]=overlap_path
     sim=generate_causal_data(500,seed=seed,effect="constant"); observed=[sim.true_ate, float(sim.frame.loc[sim.frame.treatment==1,"outcome"].mean()-sim.frame.loc[sim.frame.treatment==0,"outcome"].mean())]; fig,ax=plt.subplots(); ax.bar(["true","naive"],observed); ax.set_title("Estimator recovery (simulated)"); recovery_path=figures/"estimator_recovery.png"; fig.savefig(recovery_path,dpi=120); plt.close(fig); support["recovery"]=recovery_path
     fig,ax=plt.subplots(); ax.plot([0,1],[0,0],label="RCT benchmark"); ax.bar([0,1],[0,observed[1]],alpha=.6); ax.set_xticks([0,1],["randomized","confounded"]); ax.set_title("Observational vs RCT benchmark (simulated)"); obs_path=figures/"obs_vs_rct.png"; fig.savefig(obs_path,dpi=120); plt.close(fig); support["obs"]=obs_path
     fig,ax=plt.subplots(); bins=np.array_split(np.argsort(score),5); ax.plot([np.mean(test_y[b]) for b in bins],"o-"); ax.plot([np.mean(score[b]) for b in bins],"o-"); ax.set_title("Propensity/uplift calibration diagnostic (estimated)"); cal_path=figures/"calibration_curve.png"; fig.savefig(cal_path,dpi=120); plt.close(fig); support["calibration"]=cal_path
     fig,ax=plt.subplots(); ax.plot(np.arange(8),np.linspace(1,1.15,8),label="expected"); ax.plot(np.arange(8),np.linspace(.98,1.08,8),label="realized"); ax.legend(); ax.set_title("Rollout monitoring (simulated)"); mon_path=figures/"monitoring_dashboard.png"; fig.savefig(mon_path,dpi=120); plt.close(fig); support["monitoring"]=mon_path
-    criteo_label = "measured full-data Criteo" if mode == "full" else "simulated Criteo-shaped smoke"
     paragraphs=[f"Label: {criteo_label} randomized advertising data.",f"Conversion ITT estimate: {estimate.point:.6f} [{estimate.ci_low:.6f}, {estimate.ci_high:.6f}], n={estimate.treated_n+estimate.control_n}.",f"Business claim (synthetic illustration): at the canonical 50% budget, the capacity-aware optimizer produces {canonical_claim['optimized_expected_value_inr']:.0f} INR expected net value, {canonical_claim['incremental_value_vs_random_inr_per_eligible_user']:.2f} INR per eligible user above random, with a bootstrap interval [{canonical_claim['ci_low_inr_per_eligible_user']:.2f}, {canonical_claim['ci_high_inr_per_eligible_user']:.2f}]. This is not realized impact."]
     _write_pdf(output/"experiment_readout.pdf","Experiment readout",paragraphs,[("Estimated Qini",plt.imread(qini_path)),("Business-case sensitivity",plt.imread(sensitivity_path))])
     _write_pdf(Path("docs")/"executive_case_study.pdf","Increment executive case study",["Decision: allocate a fixed promotion budget to maximize incremental contribution margin per eligible customer.",f"The smoke run estimates a conversion ITT of {estimate.point:.4f}; uncertainty is [{estimate.ci_low:.4f}, {estimate.ci_high:.4f}].",f"Business claim (synthetic illustration): at 50% of treat-all-small spend, capacity-aware allocation produces {canonical_claim['optimized_expected_value_inr']:.0f} INR expected net value and {canonical_claim['incremental_value_vs_random_inr_per_eligible_user']:.2f} INR per eligible user above random (95% bootstrap interval {canonical_claim['ci_low_inr_per_eligible_user']:.2f} to {canonical_claim['ci_high_inr_per_eligible_user']:.2f}).","Sensitivity: the advantage remains positive across the checked margin and capacity grid; see reports/business_case_sensitivity.csv for the exact scenarios.","Recommendation: validate economics and causal response in a geo-randomized pilot before treating the scenario as realized impact."],[("Estimated Qini",plt.imread(qini_path)),("Synthetic matched-budget policy value",plt.imread(profit_path)),("Synthetic sensitivity grid",plt.imread(sensitivity_path))])
@@ -184,7 +188,7 @@ def run(mode: str = "smoke", output_dir: str | Path = "reports", criteo_path: st
     _write_pdf(Path("docs")/"executive_case_study.pdf","Increment executive case study",["Decision: allocate a fixed promotion budget to maximize incremental contribution margin per eligible customer.",f"The {criteo_label} estimates a conversion ITT of {estimate.point:.4f}; uncertainty is [{estimate.ci_low:.4f}, {estimate.ci_high:.4f}].",f"Business claim (synthetic illustration): at 50% of treat-all-small spend, capacity-aware allocation produces {canonical_claim['optimized_expected_value_inr']:.0f} INR expected net value and {canonical_claim['incremental_value_vs_random_inr_per_eligible_user']:.2f} INR per eligible user above random (95% bootstrap interval {canonical_claim['ci_low_inr_per_eligible_user']:.2f} to {canonical_claim['ci_high_inr_per_eligible_user']:.2f}).","Sensitivity: the advantage remains positive across the checked margin and capacity grid; see reports/business_case_sensitivity.csv for the exact scenarios.","Recommendation: validate economics and causal response in a geo-randomized pilot before treating the scenario as realized impact."],[("Estimated Qini",plt.imread(qini_path)),("Synthetic matched-budget policy value",plt.imread(profit_path)),("Synthetic sensitivity grid",plt.imread(sensitivity_path))])
     deck_path=output/"interview_deck.pptx"; _write_deck(deck_path,f"Synthetic business case: {canonical_claim['incremental_value_vs_random_inr_per_eligible_user']:.2f} INR per eligible user above random at 50% budget",[("Qini",qini_path),("Uplift deciles",decile_path),("Profit vs budget",profit_path)])
     _, peak_memory = tracemalloc.get_traced_memory(); tracemalloc.stop()
-    manifest={"mode":mode,"seed":seed,"seeds":{"pipeline":seed,"business_case":seed,"bootstrap":seed+1},"rows":estimate.treated_n+estimate.control_n,"validated_rows":estimate.treated_n+estimate.control_n,"estimate":estimate.__dict__,"policy_value_estimate":policy_point,"policy_threshold":threshold,"model_selection":selection.__dict__,"business_case_claim":canonical_claim,"business_case_sensitivity_rows":len(business_case.sensitivity),"assignment_artifact":{"path":str(assignment_path),"rows":len(published_assignments)},"platform":platform.python_version(),"inputs":{},"model_rows":len(frame),"model_training_cap":model_cap,"config_hash":_config_hash(),"dependencies":_dependency_versions(),"git_revision":_git_revision(),"runtime_seconds":time.perf_counter()-started,"peak_memory_bytes":peak_memory}
+    manifest={"mode":mode,"seed":seed,"seeds":{"pipeline":seed,"business_case":seed,"bootstrap":seed+1},"rows":estimate.treated_n+estimate.control_n,"validated_rows":estimate.treated_n+estimate.control_n,"estimate":estimate.__dict__,"policy_value_estimate":{"point":policy_point,"ci_low":policy_ci_low,"ci_high":policy_ci_high},"policy_threshold":threshold,"model_selection":selection.__dict__,"business_case_claim":canonical_claim,"business_case_sensitivity_rows":len(business_case.sensitivity),"assignment_artifact":{"path":str(assignment_path),"rows":len(published_assignments)},"platform":platform.python_version(),"inputs":{},"model_rows":len(frame),"model_training_cap":model_cap,"config_hash":_config_hash(),"dependencies":_dependency_versions(),"git_revision":_git_revision(),"runtime_seconds":time.perf_counter()-started,"peak_memory_bytes":peak_memory}
     if mode=="full": manifest["inputs"]["criteo"]={"path":str(source),"sha256":_sha256(source)}
     if mode=="full": manifest["criteo_partitions"]=partition_manifest
     registry_path = write_claim_registry(manifest, output / "claim_registry.json")

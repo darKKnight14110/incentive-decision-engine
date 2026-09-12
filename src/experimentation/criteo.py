@@ -276,6 +276,20 @@ def write_criteo_partitions(
     fitting and final-test scoring.
     """
 
+    root = Path(output_dir)
+    existing_manifest = root / "manifest.json"
+    if existing_manifest.exists():
+        try:
+            cached = json.loads(existing_manifest.read_text(encoding="utf-8"))
+            if (
+                int(cached.get("seed", -1)) == int(seed)
+                and cached.get("input_sha256") == _sha256_file(path)
+                and bool(cached.get("coverage_verified"))
+                and sum(dict(cached.get("counts", {})).values()) > 0
+            ):
+                return cached
+        except (OSError, ValueError, TypeError):
+            pass
     if use_duckdb:
         try:
             return _write_criteo_partitions_duckdb(path, output_dir, seed=seed)
@@ -284,7 +298,6 @@ def write_criteo_partitions(
             # the bounded pandas implementation makes the loader usable in
             # minimal environments and preserves a clear fallback path.
             pass
-    root = Path(output_dir)
     root.mkdir(parents=True, exist_ok=True)
     counts = {"train": 0, "validation": 0, "test": 0}
     parts = {name: 0 for name in counts}
@@ -406,6 +419,57 @@ def iter_partition(path: str | Path, split: str, chunksize: int = 250_000) -> It
         frame = pd.read_parquet(file)
         for start in range(0, len(frame), chunksize):
             yield validate_criteo_frame(frame.iloc[start : start + chunksize])
+
+
+def load_partition(
+    path: str | Path,
+    split: str,
+    max_rows: int | None = None,
+    seed: int = 2025,
+) -> pd.DataFrame:
+    """Load a deterministic bounded sample from a Parquet split.
+
+    DuckDB orders by a stable row-hash before applying ``LIMIT``. This avoids
+    file-order bias in datasets whose first rows can be nearly single-arm.
+    """
+
+    if max_rows is not None:
+        try:
+            import duckdb
+
+            root = Path(path) / split
+            files = sorted(root.glob("part-*.parquet"))
+            if not files:
+                raise FileNotFoundError(f"no partition files found for split={split}: {root}")
+            escaped = (root / "part-*.parquet").resolve().as_posix().replace("'", "''")
+            columns = ", ".join(f'"{column}"' for column in REQUIRED_COLUMNS)
+            connection = duckdb.connect()
+            try:
+                frame = connection.execute(
+                    f"SELECT {columns} FROM (SELECT *, hash(row_number() OVER () + {int(seed)}) AS _sample_order "
+                    f"FROM read_parquet('{escaped}')) ORDER BY _sample_order LIMIT {int(max_rows)}"
+                ).df()
+            finally:
+                connection.close()
+            return validate_criteo_frame(frame)
+        except ImportError:
+            pass
+
+    chunks: list[pd.DataFrame] = []
+    remaining = max_rows
+    for chunk in iter_partition(path, split):
+        if remaining is None:
+            chunks.append(chunk)
+            continue
+        take = chunk.iloc[:remaining]
+        if not take.empty:
+            chunks.append(take)
+        remaining -= len(take)
+        if remaining <= 0:
+            break
+    if not chunks:
+        raise ValueError(f"no rows found in partition split={split}")
+    return pd.concat(chunks, ignore_index=True)
 
 
 def load_criteo(path: str | Path, seed: int = 2025, max_rows: int | None = None) -> CriteoDataset:

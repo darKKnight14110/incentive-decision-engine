@@ -12,6 +12,7 @@ def build_claim_registry(manifest: dict[str, Any]) -> dict[str, Any]:
 
     mode = str(manifest.get("mode", "smoke"))
     estimate = dict(manifest.get("estimate", {}))
+    policy = dict(manifest.get("policy_value_estimate", {}))
     claim = dict(manifest.get("business_case_claim", {}))
     criteo_status = "measured" if mode == "full" else "simulated"
     return {
@@ -28,7 +29,10 @@ def build_claim_registry(manifest: dict[str, Any]) -> dict[str, Any]:
                 "ci_low": estimate.get("ci_low"),
                 "ci_high": estimate.get("ci_high"),
                 "rows": estimate.get("treated_n", 0) + estimate.get("control_n", 0),
-                "caveat": "Smoke is a simulated Criteo-shaped fixture; full mode streams the validated archive.",
+                "policy_value_point": policy.get("point"),
+                "policy_value_ci_low": policy.get("ci_low"),
+                "policy_value_ci_high": policy.get("ci_high"),
+                "caveat": "Smoke is a simulated Criteo-shaped fixture; full mode streams the validated archive." if mode != "full" else "Locked model and threshold evaluated once on the held-out Criteo test partition.",
             },
             {
                 "id": "synthetic_marketplace_policy",
