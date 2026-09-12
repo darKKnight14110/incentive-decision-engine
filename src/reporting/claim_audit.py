@@ -44,6 +44,12 @@ def audit_claims(root: str | Path = ".") -> list[str]:
             errors.append("claim registry must contain Criteo ITT and synthetic policy claims")
         if mode == "smoke" and claims.get("criteo_conversion_itt", {}).get("label") != "simulated":
             errors.append("smoke Criteo claim must be labelled simulated in the registry")
+        if mode == "full" and claims.get("criteo_conversion_itt", {}).get("label") != "measured":
+            errors.append("full Criteo claim must be labelled measured in the registry")
+        policy_low = claims.get("criteo_conversion_itt", {}).get("policy_value_ci_low")
+        policy_high = claims.get("criteo_conversion_itt", {}).get("policy_value_ci_high")
+        if mode == "full" and (policy_low is None or policy_high is None):
+            errors.append("full Criteo claim must include a streamed policy-value interval")
         if claims.get("synthetic_marketplace_policy", {}).get("label") != "estimated illustration":
             errors.append("synthetic policy claim must be labelled estimated illustration")
     benchmark_path = base / "reports" / "optimizer_benchmark.json"
