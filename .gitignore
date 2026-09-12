@@ -5,6 +5,14 @@ __pycache__/
 .pytest_tmp/
 .mypy_cache/
 .venv/
+build/
+dist/
+*.egg-info/
+.ruff_cache/
+.streamlit/
+*.joblib
+*.pkl
+*.pickle
 data/raw/*
 data/interim/*
 data/processed/*
