@@ -170,10 +170,10 @@ synthetic marketplace ──> INR economics ──> constrained optimizer ──
                                                 capacity + monitoring controls
 ```
 
-The two data sources are intentionally never joined. A successful full run
+The two data sources have been intentionally left unjoined. A successful full run
 uses Criteo for measured advertising incrementality; the checked-in smoke run
 is simulated Criteo-shaped evidence. Synthetic marketplace data supplies
-multi-action economics, capacity, interference, and rollout demonstrations.
+multi action economics, capacity, interference, and rollout demonstrations.
 
 ## Architecture
 
